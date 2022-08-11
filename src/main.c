@@ -1,10 +1,13 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <conio.h>
 #include <peekpoke.h>
 
 #define RESOLUTION_X 160
 #define RESOLUTION_Y 200
 #define ORIGIN_Z 0
+#define MYCOLORS 0xFC	// color 2, color 1
+#define MYCOLORS2 0x01	// unused, color 3
 
 // STRUCTS
 
@@ -38,8 +41,8 @@ struct floatingPoint half;
 
 
 
-
-// FLOATING POINT MATH - using Basic and Kernal ROM routines called from asseembly
+// FLOATING POINT MATH - using Basic and Kernal ROM routines called from assembly
+// Made by Marius Irgens, but based on this awesome documentation:
 // https://codebase64.org/doku.php?id=base:kernal_floating_point_mathematics
 
 //multipurpose adress-to-register load (A/Y low/high)
@@ -124,11 +127,11 @@ void multiplyFAC1Mem(unsigned int adress) {
 	LoadRegAYwithAdress(adress);
 	__asm__("jsr $ba28"); //multiplication - FAC1 and value at mem adress
 }
-
-void divideFACs() {
-	__asm__("lda $61"); //to set zero flag (sign comparison not performed)
-	__asm__("jsr $bb12"); //division - FAC2 by FAC1 - quot in FAC1, rem in FAC2 -(FAC2/FAC1)
-}
+//
+//void divideFACs() {
+//	__asm__("lda $61"); //to set zero flag (sign comparison not performed)
+//	__asm__("jsr $bb12"); //division - FAC2 by FAC1 - quot in FAC1, rem in FAC2 -(FAC2/FAC1)
+//}
 
 void divideFAC1Mem(unsigned int adress) {
 	LoadRegAYwithAdress(adress);
@@ -300,23 +303,23 @@ void normalizeVector(unsigned int vecAdressA, unsigned int destAdress) {
 
 void makeFraction(signed int x, signed int y, unsigned int destAdress) {
 	loadFAC1Immediate(x);
-	moveFAC1toFAC2();
+	storeFAC1InMem(&tempFPx);
 	loadFAC1Immediate(y);
-	divideFACs();
+	divideFAC1Mem(&tempFPx);			// (mem / FAC1)
 	storeFAC1InMem(destAdress);
 }
 
-void calcOrigin(signed int x, signed int y, unsigned int destAdress) {
+void calcOrigin(unsigned int x, unsigned int y, unsigned int destAdress) {
 	//origin.x
 	// x / resolution
 	loadFAC1Immediate(x);
-	moveFAC1toFAC2();
+	storeFAC1InMem(&tempFPx);
 	loadFAC1Immediate(RESOLUTION_X);
-	divideFACs();
+	divideFAC1Mem(&tempFPx);			// (mem / FAC1)
 	// (x / resolution) - 0.5
 	moveFAC1toFAC2();
 	loadFAC1fromMem(&half);
-	subtractFACs();
+	subtractFACs();						// (FAC2 - FAC1)
 	// ((x / resolution) -0.5) * 2
 	storeFAC1InMem(&tempFPx);
 	loadFAC1Immediate(2);
@@ -326,17 +329,17 @@ void calcOrigin(signed int x, signed int y, unsigned int destAdress) {
 	//origin.y
 	// y / resolution
 	loadFAC1Immediate(y);
-	moveFAC1toFAC2();
+	storeFAC1InMem(&tempFPy);
 	loadFAC1Immediate(RESOLUTION_Y);
-	divideFACs();
-	// (x / resolution) - 0.5
+	divideFAC1Mem(&tempFPy);			// (mem / FAC1)
+	// (y / resolution) - 0.5
 	moveFAC1toFAC2();
 	loadFAC1fromMem(&half);
 	subtractFACs();
-	// ((x / resolution) -0.5) * 2
-	storeFAC1InMem(&tempFPx);
+	// ((y / resolution) -0.5) * 2
+	storeFAC1InMem(&tempFPy);
 	loadFAC1Immediate(2);
-	multiplyFAC1Mem(&tempFPx);
+	multiplyFAC1Mem(&tempFPy);
 	storeFAC1InMem(destAdress + 5);
 
 	loadFAC1Immediate(ORIGIN_Z);
@@ -487,15 +490,128 @@ void sphereIntersect(unsigned int ro, unsigned int rd, unsigned int sc, unsigned
 		storeFAC1InMem(&tempFPz);
 
 		//(-b - sqrt(D)) / 2 * a (FAC2/FAC1)
-		loadFAC2fromMem(&tempFPz);
+		/*loadFAC2fromMem(&tempFPz);
 		loadFAC1fromMem(&tempFPv);
-		divideFACs();
+		divideFACs();*/
+		//(mem/FAC1)
+		loadFAC1fromMem(&tempFPv);
+		divideFAC1Mem(&tempFPz);
 		storeFAC1InMem(destAdress);
 	}
 	else {
 		loadFAC1Immediate(-1);
 		storeFAC1InMem(destAdress);
 	}
+}
+
+char getColorValue(int x, int y) {
+	int cx = 80;
+	int cy = 100;
+	int vecLength;
+
+	int vecx = abs(x - cx) * 2;
+	int vecy = abs(y - cy);
+
+	vecLength = (vecx * vecx) + (vecy * vecy);
+	//vecLength = mySqrt(vecLength);
+
+	if (vecLength <= 16000) {
+		return 1;
+	}
+	else {
+		return 0;
+	}
+}
+
+//Draw pixel while using multicolor bitmap mode
+void drawPixelMBM(unsigned int x, unsigned int y, unsigned char color) {
+	unsigned char addedPixel;
+	unsigned char existingPixel;
+	unsigned int memAddr;
+	div_t xDiv;
+	div_t yDiv;
+	xDiv = div(x, 4);
+	yDiv = div(y, 8);
+
+	if (xDiv.rem == 0 && color == 1) {
+		addedPixel = 0b10000000;
+	}
+	else if (xDiv.rem == 0 && color == 2) {
+		addedPixel = 0b01000000;
+	}
+	else if (xDiv.rem == 0 && color == 3) {
+		addedPixel = 0b11000000;
+	}
+	else if (xDiv.rem == 1 && color == 1) {
+		addedPixel = 0b00100000;
+	}
+	else if (xDiv.rem == 1 && color == 2) {
+		addedPixel = 0b00010000;
+	}
+	else if (xDiv.rem == 1 && color == 3) {
+		addedPixel = 0b00110000;
+	}
+	else if (xDiv.rem == 2 && color == 1) {
+		addedPixel = 0b00001000;
+	}
+	else if (xDiv.rem == 2 && color == 2) {
+		addedPixel = 0b00000100;
+	}
+	else if (xDiv.rem == 2 && color == 3) {
+		addedPixel = 0b00001100;
+	}
+	else if (xDiv.rem == 3 && color == 1) {
+		addedPixel = 0b00000010;
+	}
+	else if (xDiv.rem == 3 && color == 2) {
+		addedPixel = 0b00000001;
+	}
+	else if (xDiv.rem == 3 && color == 3) {
+		addedPixel = 0b00000011;
+	}
+	memAddr = 8192 + (yDiv.quot * 320) + (xDiv.quot * 8) + (yDiv.rem);
+	existingPixel = PEEK(memAddr);
+	addedPixel = existingPixel + addedPixel;
+	POKE(memAddr, addedPixel);
+	//Scputcxy(xDiv.quot, yDiv.quot, color + MYCOLORS);
+}
+
+void setupFloatMathDebug() {
+	POKE(0x0001, 0b00110111);		//ram Configuration
+}
+
+void setupRaytrace() {
+	unsigned int i = 0;						// loop iterator
+	unsigned char emptyPixel = 0b00000000;
+	unsigned int memAddr = 0x2000;	// adress at start of bitmap memory RAM location
+	POKE(0x0001, 0b00110111);		//ram Configuration
+	POKE(0xd011, 0b00110100);		//set to bitmap mode
+	POKE(0xd016, 0x18);				//set to multicolor mode
+	POKE(0xd018, 0x18);				//set screen ram pointer to $0400 and bitmap ram pointer to $2000
+
+	//bordercolor(1);
+	bgcolor(0x06);
+
+	// Erase bitmap memory (blank screen)
+	for (i = 0; i < 8000; i++) {
+		POKE(memAddr, emptyPixel);
+		memAddr++;
+	}
+
+	// set color matrix (color 1 and 2)
+	memAddr = 0x0400;
+	for (i = 0; i < 1000; i++) {
+		POKE(memAddr, MYCOLORS);
+		memAddr++;
+	}
+
+	// set color ram (color 3)
+	memAddr = 0xD800;
+	for (i = 0; i < 1000; i++) {
+		POKE(memAddr, MYCOLORS2);
+		memAddr++;
+	}
+
 }
 
 void main(void)
@@ -506,14 +622,15 @@ void main(void)
 	struct vector3 sphereCenter;
 	struct floatingPoint sphereRadius;
 	struct floatingPoint tValue;
+	unsigned int x = 0;						// pixel position x coordinate
+	unsigned int y = 0;						// pixel position y coordinate
+	unsigned char drawColor = 3;
+	signed int tValueInt;
 
 	//SETUP
-	unsigned int memAddr = 0x2000;	// adress at start of bitmap memory RAM location
-	POKE(0x0001, 0b00110111);		//ram Configuration
-	//POKE(0xd011, 0b00110100);		//set to bitmap mode
-	//POKE(0xd016, 0x18);				//set to multicolor mode
-	//POKE(0xd018, 0x18);				//set screen ram pointer to $0400 and bitmap ram pointer to $2000
+	setupRaytrace();
 
+	//Make Float - 0.5
 	makeFraction(1, 2, &half);
 
 	//set projection angle point (change Z position to change lens angle)
@@ -523,29 +640,44 @@ void main(void)
 	fillVectorValues(&sphereCenter, 0, 0, 5);
 	makeFPImmediate(2, &sphereRadius);
 
-	//LOOP
 
-	//Calculate origin vector at pixel
-	calcOrigin(50, 100, &rayOrigin);
+	// RENDER LOOP
+	for (y = 0; y < 200; y++) {
+		for (x = 0; x < 160; x++) {
 
-	//Calculatee ray direction vector from pixel
-	vectorSubtraction(&rayOrigin, &projPoint, &rayDirection);
-	normalizeVector(&rayDirection, &rayDirection);
+			//Calculate origin vector at pixel
+			calcOrigin(x, y, &rayOrigin);
 
-	// calculate ray intersection distance
-	sphereIntersect(&rayOrigin, &rayDirection, &sphereCenter, &sphereRadius, &tValue);
+			//Calculate ray direction vector from pixel
+			vectorSubtraction(&rayOrigin, &projPoint, &rayDirection);
+			normalizeVector(&rayDirection, &rayDirection);
 
-	//tValue holds distance from origin to intersection point
-	//TODO:
-	//Update pixel plot, use assembly or instead of Poke
-	//Test rendering with single color (need pixel plot)
-	//Add intersection point (origin + rayDirection * tValue)
-	//Add normal calculation (sphere center - intersection point)
-	//Add lambertian shading
-	//Choose color according to labertian value (0.00-0.25, 0.25-0.50, 0.50-0.75, 0.75-1.00)
+			// calculate ray intersection distance
+			sphereIntersect(&rayOrigin, &rayDirection, &sphereCenter, &sphereRadius, &tValue);
+			
 
+			loadFAC1fromMem(&tValue);
+			FAC1toInt(&tValueInt);
+			//HER ER DET NOK EN DEL AVRUNDINGSFEIL
+			//BRUK HELLER FP EVALUATION
+			
+			if (tValueInt >= 0) {
+				drawPixelMBM(x, y, 3);
+			}
+			else {
+				drawPixelMBM(x, y, 1);
+			}
 
-	printFP(&tValue);
-
+			
+			//tValue holds distance from origin to intersection point
+			//TODO:
+			//Velg mellom floating point debug og render
+			//Test rendering with single color (need pixel plot)
+			//Add intersection point (origin + rayDirection * tValue)
+			//Add normal calculation (sphere center - intersection point)
+			//Add lambertian shading
+			//Choose color according to labertian value (0.00-0.25, 0.25-0.50, 0.50-0.75, 0.75-1.00)
+		}
+	}
 	for (;;); // loop forever, never ends
 }

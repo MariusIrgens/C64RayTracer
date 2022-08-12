@@ -8,6 +8,8 @@
 #define ORIGIN_Z 0
 #define MYCOLORS 0xFC	// color 2, color 1
 #define MYCOLORS2 0x01	// unused, color 3
+#define vicBankAdress 0x4000
+#define bitmapAdress 0x6000
 
 // STRUCTS
 
@@ -30,6 +32,7 @@ struct vector3 {
 //GLOBAL VARIABLES
 unsigned int adress;
 signed int integer;
+unsigned char charact;
 unsigned char adressLow;
 unsigned char adressHigh;
 unsigned char numberLow;
@@ -159,15 +162,23 @@ void powFAC2toFAC1() {
 	__asm__("jsr $bf7b"); //FAC2^FAC1
 }
 
-void evaluateSignFAC1() {
-	__asm__("jsr $bc39"); // $01 = pos, $ff = neg, $00 = 0;
-}
+//void evaluateSignFAC1(unsigned int destAdress) {
+//	__asm__("jsr $bc39"); // $01 = pos, $ff = neg, $00 = 0;
+//	charact = PEEK(0x0065);
+//	POKE(destAdress, charact);
+//}
+
+//void compareFAC1toMem(unsigned int adress, unsigned int destAdress) {
+//	LoadRegAYwithAdress(adress);
+//	__asm__("jsr $bc5b");
+//	__asm__("sta %i", destAdress);
+//}
 
 void FAC1toInt(unsigned int destAdress) {
 	__asm__("jsr $bc9b"); // Truncate FAC1
 	numberLow = PEEK(0x0065);
 	numberHigh = PEEK(0x0064);
-	integer = numberHigh;
+	integer = 0x00ff & numberHigh;
 	integer = integer << 8;
 	integer += numberLow;
 	POKEW(destAdress, integer);
@@ -336,9 +347,9 @@ void calcOrigin(unsigned int x, unsigned int y, unsigned int destAdress) {
 	moveFAC1toFAC2();
 	loadFAC1fromMem(&half);
 	subtractFACs();
-	// ((y / resolution) -0.5) * 2
+	// ((y / resolution) -0.5) * -2		// -2 = flip image
 	storeFAC1InMem(&tempFPy);
-	loadFAC1Immediate(2);
+	loadFAC1Immediate(-2);
 	multiplyFAC1Mem(&tempFPy);
 	storeFAC1InMem(destAdress + 5);
 
@@ -569,49 +580,101 @@ void drawPixelMBM(unsigned int x, unsigned int y, unsigned char color) {
 	else if (xDiv.rem == 3 && color == 3) {
 		addedPixel = 0b00000011;
 	}
-	memAddr = 8192 + (yDiv.quot * 320) + (xDiv.quot * 8) + (yDiv.rem);
+	memAddr = bitmapAdress + (yDiv.quot * 320) + (xDiv.quot * 8) + (yDiv.rem);
 	existingPixel = PEEK(memAddr);
 	addedPixel = existingPixel + addedPixel;
 	POKE(memAddr, addedPixel);
 	//Scputcxy(xDiv.quot, yDiv.quot, color + MYCOLORS);
 }
 
-void setupFloatMathDebug() {
-	POKE(0x0001, 0b00110111);		//ram Configuration
-}
+//void FloatMathDebug() {
+//	struct vector3 rayOrigin;
+//	struct vector3 projPoint;
+//	struct vector3 rayDirection;
+//	struct vector3 sphereCenter;
+//	struct floatingPoint sphereRadius;
+//	struct floatingPoint tValue;
+//	signed int tValueInt;
+//	//signed char ifCheck;
+//
+//	//SETUP
+//	unsigned int memAddr = 0x2000;	// adress at start of bitmap memory RAM location
+//	POKE(0x0001, 0b00110111);		//ram Configuration
+//
+//	makeFraction(1, 2, &half);
+//
+//	//set projection angle point (change Z position to change lens angle)
+//	fillVectorValues(&projPoint, 0, 0, -1);
+//
+//	//set Sphere center and radius
+//	fillVectorValues(&sphereCenter, 0, 0, 5);
+//	makeFPImmediate(2, &sphereRadius);
+//
+//	//LOOP
+//
+//	//Calculate origin vector at pixel
+//	calcOrigin(46, 100, &rayOrigin); 
+//
+//	//Calculate ray direction vector from pixel
+//	vectorSubtraction(&rayOrigin, &projPoint, &rayDirection); 
+//	normalizeVector(&rayDirection, &rayDirection);	
+//
+//	// calculate ray intersection distance
+//	sphereIntersect(&rayOrigin, &rayDirection, &sphereCenter, &sphereRadius, &tValue);
+//
+//	loadFAC1fromMem(&tValue);
+//	//printFAC1();
+//	//cprintf("\n \r");
+//	//FAC1toInt(&tValueInt);
+//	//cprintf("%i \n \r", tValueInt);
+//	FAC1toInt(&tValueInt);
+//	//cprintf("%i \n \r", tValueInt);
+//
+//	if (tValueInt >= 0) {
+//		cprintf("YES \n \r");
+//	}
+//	else {
+//		cprintf("NO \n \r");
+//	}
+//
+//
+//
+//	for (;;); // loop forever, never ends
+//
+//}
 
 void setupRaytrace() {
-	unsigned int i = 0;						// loop iterator
+	unsigned int i = 0;	
 	unsigned char emptyPixel = 0b00000000;
-	unsigned int memAddr = 0x2000;	// adress at start of bitmap memory RAM location
-	POKE(0x0001, 0b00110111);		//ram Configuration
-	POKE(0xd011, 0b00110100);		//set to bitmap mode
-	POKE(0xd016, 0x18);				//set to multicolor mode
-	POKE(0xd018, 0x18);				//set screen ram pointer to $0400 and bitmap ram pointer to $2000
+	unsigned int memAddr;
 
 	//bordercolor(1);
 	bgcolor(0x06);
+	
+	POKE(0x0001, 0b00110111);		//ram Configuration
+	POKE(0xdd00, 0b00000010);		//VIC configuration (CIA-2) - VIC Adresses $4000 - $7FFF
+	POKE(0xd011, 0b00110100);		//set to bitmap mode
+	POKE(0xd016, 0b00011000);		//set to multicolor mode
+	POKE(0xd018, 0b00001000);		//set screenmem to slot 0 (+ 0) and bitmap pointer to slot 2 (+ $2000)
 
+	
+	memAddr = bitmapAdress;
 	// Erase bitmap memory (blank screen)
-	for (i = 0; i < 8000; i++) {
-		POKE(memAddr, emptyPixel);
-		memAddr++;
+	for (i = 0; i < 0x2000; i++) {
+		POKE(memAddr + i, emptyPixel);
 	}
 
 	// set color matrix (color 1 and 2)
-	memAddr = 0x0400;
-	for (i = 0; i < 1000; i++) {
-		POKE(memAddr, MYCOLORS);
-		memAddr++;
+	memAddr = vicBankAdress;
+	for (i = 0; i < 0x0400; i++) {
+		POKE(memAddr + i, MYCOLORS);
 	}
 
 	// set color ram (color 3)
-	memAddr = 0xD800;
-	for (i = 0; i < 1000; i++) {
-		POKE(memAddr, MYCOLORS2);
-		memAddr++;
+	memAddr = 0xD800; // Hardware Color RAM location
+	for (i = 0; i < 0x0400; i++) {
+		POKE(memAddr + i, MYCOLORS2);
 	}
-
 }
 
 void main(void)
@@ -627,6 +690,9 @@ void main(void)
 	unsigned char drawColor = 3;
 	signed int tValueInt;
 
+	//DEBUG CALC
+	//FloatMathDebug();
+	
 	//SETUP
 	setupRaytrace();
 
@@ -634,14 +700,14 @@ void main(void)
 	makeFraction(1, 2, &half);
 
 	//set projection angle point (change Z position to change lens angle)
-	fillVectorValues(&projPoint, 0, 0, -5);
+	fillVectorValues(&projPoint, 0, 0, -1);
 
 	//set Sphere center and radius
 	fillVectorValues(&sphereCenter, 0, 0, 5);
 	makeFPImmediate(2, &sphereRadius);
 
 
-	// RENDER LOOP
+	// RENDER LOOP	
 	for (y = 0; y < 200; y++) {
 		for (x = 0; x < 160; x++) {
 
@@ -658,8 +724,7 @@ void main(void)
 
 			loadFAC1fromMem(&tValue);
 			FAC1toInt(&tValueInt);
-			//HER ER DET NOK EN DEL AVRUNDINGSFEIL
-			//BRUK HELLER FP EVALUATION
+			//HER ER DET AVRUNDINGSFEIL VED HELTALL (3 -> 2)
 			
 			if (tValueInt >= 0) {
 				drawPixelMBM(x, y, 3);

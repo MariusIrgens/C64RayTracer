@@ -13,7 +13,7 @@
 
 // STRUCTS
 
-// Floating points needs 5 bytes in RAM
+// Floating points (needs 5 bytes in RAM)
 struct floatingPoint {
 	char exponent;
 	char mantissa1;
@@ -22,7 +22,7 @@ struct floatingPoint {
 	char mantissa4;
 };
 
-// vector3 needs 3*5 = 15 bytes in RAM
+// vector3 of floating points (needs 3*5 = 15 bytes in RAM)
 struct vector3 {
 	struct floatingPoint x; // 5 bytes each
 	struct floatingPoint y;
@@ -41,7 +41,9 @@ struct floatingPoint tempFPx;
 struct floatingPoint tempFPy;
 struct floatingPoint tempFPz;
 struct floatingPoint half;
-
+struct floatingPoint aspect;
+div_t xDiv;
+div_t yDiv;
 
 
 // FLOATING POINT MATH - using Basic and Kernal ROM routines called from assembly
@@ -130,11 +132,6 @@ void multiplyFAC1Mem(unsigned int adress) {
 	LoadRegAYwithAdress(adress);
 	__asm__("jsr $ba28"); //multiplication - FAC1 and value at mem adress
 }
-//
-//void divideFACs() {
-//	__asm__("lda $61"); //to set zero flag (sign comparison not performed)
-//	__asm__("jsr $bb12"); //division - FAC2 by FAC1 - quot in FAC1, rem in FAC2 -(FAC2/FAC1)
-//}
 
 void divideFAC1Mem(unsigned int adress) {
 	LoadRegAYwithAdress(adress);
@@ -161,18 +158,6 @@ void powFAC2toMem(unsigned int adress) {
 void powFAC2toFAC1() {
 	__asm__("jsr $bf7b"); //FAC2^FAC1
 }
-
-//void evaluateSignFAC1(unsigned int destAdress) {
-//	__asm__("jsr $bc39"); // $01 = pos, $ff = neg, $00 = 0;
-//	charact = PEEK(0x0065);
-//	POKE(destAdress, charact);
-//}
-
-//void compareFAC1toMem(unsigned int adress, unsigned int destAdress) {
-//	LoadRegAYwithAdress(adress);
-//	__asm__("jsr $bc5b");
-//	__asm__("sta %i", destAdress);
-//}
 
 void FAC1toInt(unsigned int destAdress) {
 	__asm__("jsr $bc9b"); // Truncate FAC1
@@ -210,17 +195,17 @@ void printVectorValues(unsigned int vecAdress) {
 }
 
 void vectorAddition(unsigned int vecAdressA, unsigned int vecAdressB, unsigned int destAdress) {
-	//Add B.x to A.x and store it in dest.x (A-B)
+	//Add B.x to A.x and store it in dest.x 
 	loadFAC1fromMem(vecAdressA);
 	addFAC1Mem(vecAdressB);
 	storeFAC1InMem(destAdress);
 
-	//subtract B.y from A.y and store it in dest.y (A-B)
+	//Add B.y to A.y and store it in dest.y 
 	loadFAC1fromMem(vecAdressA + 5);
 	addFAC1Mem(vecAdressB + 5);
 	storeFAC1InMem(destAdress + 5);
 
-	//subtract B.z from A.z and store it in dest.z (A-B)
+	//Add B.z to A.z and store it in dest.z 
 	loadFAC1fromMem(vecAdressA + 10);
 	addFAC1Mem(vecAdressB + 10);
 	storeFAC1InMem(destAdress + 10);
@@ -240,6 +225,23 @@ void vectorSubtraction(unsigned int vecAdressA, unsigned int vecAdressB, unsigne
 	//subtract B.z from A.z and store it in dest.z (A-B)
 	loadFAC1fromMem(vecAdressB + 10);
 	subtractFAC1Mem(vecAdressA + 10);
+	storeFAC1InMem(destAdress + 10);
+}
+
+void vectorMultiplyByMem(unsigned int vecAdress, unsigned int FPadress, unsigned int destAdress) {
+	//Multiply A.x by FP and store it in dest.x 
+	loadFAC1fromMem(vecAdress);
+	multiplyFAC1Mem(FPadress);
+	storeFAC1InMem(destAdress);
+
+	//Multiply A.y by FP and store it in dest.y
+	loadFAC1fromMem(vecAdress + 5);
+	multiplyFAC1Mem(FPadress);
+	storeFAC1InMem(destAdress + 5);
+
+	//Multiply A.z by FP and store it in dest.z 
+	loadFAC1fromMem(vecAdress + 10);
+	multiplyFAC1Mem(FPadress);
 	storeFAC1InMem(destAdress + 10);
 }
 
@@ -335,6 +337,7 @@ void calcOrigin(unsigned int x, unsigned int y, unsigned int destAdress) {
 	storeFAC1InMem(&tempFPx);
 	loadFAC1Immediate(2);
 	multiplyFAC1Mem(&tempFPx);
+	multiplyFAC1Mem(&aspect);			// Make up for resolution difference
 	storeFAC1InMem(destAdress);
 
 	//origin.y
@@ -515,23 +518,10 @@ void sphereIntersect(unsigned int ro, unsigned int rd, unsigned int sc, unsigned
 	}
 }
 
-char getColorValue(int x, int y) {
-	int cx = 80;
-	int cy = 100;
-	int vecLength;
-
-	int vecx = abs(x - cx) * 2;
-	int vecy = abs(y - cy);
-
-	vecLength = (vecx * vecx) + (vecy * vecy);
-	//vecLength = mySqrt(vecLength);
-
-	if (vecLength <= 16000) {
-		return 1;
-	}
-	else {
-		return 0;
-	}
+void calcIntersectionPoint(unsigned int ro, unsigned int rd, unsigned int t, unsigned int destAdress) {
+	// rayOrigin + rayDirection * t
+	vectorMultiplyByMem(rd, t, destAdress); // rayDirection * t
+	vectorAddition(ro, destAdress, destAdress); // add ro
 }
 
 //Draw pixel while using multicolor bitmap mode
@@ -539,10 +529,12 @@ void drawPixelMBM(unsigned int x, unsigned int y, unsigned char color) {
 	unsigned char addedPixel;
 	unsigned char existingPixel;
 	unsigned int memAddr;
-	div_t xDiv;
-	div_t yDiv;
 	xDiv = div(x, 4);
 	yDiv = div(y, 8);
+
+	if (color == 0) {
+		return;
+	}
 
 	if (xDiv.rem == 0 && color == 1) {
 		addedPixel = 0b10000000;
@@ -648,8 +640,8 @@ void setupRaytrace() {
 	unsigned char emptyPixel = 0b00000000;
 	unsigned int memAddr;
 
-	//bordercolor(1);
-	bgcolor(0x06);
+	bordercolor(11);
+	bgcolor(0);
 	
 	POKE(0x0001, 0b00110111);		//ram Configuration
 	POKE(0xdd00, 0b00000010);		//VIC configuration (CIA-2) - VIC Adresses $4000 - $7FFF
@@ -682,13 +674,21 @@ void main(void)
 	struct vector3 rayOrigin;
 	struct vector3 projPoint;
 	struct vector3 rayDirection;
+	struct vector3 intersectionPoint;
 	struct vector3 sphereCenter;
+	struct vector3 lightPosition;
+	struct vector3 pointToLightVec;
+	struct vector3 pointNormalVec;
 	struct floatingPoint sphereRadius;
 	struct floatingPoint tValue;
+	struct floatingPoint lambertian;
 	unsigned int x = 0;						// pixel position x coordinate
 	unsigned int y = 0;						// pixel position y coordinate
+	unsigned int xStartEnd = 0;				// narrow the render window
+	unsigned int yStartEnd = 0;				// narrow the render window
 	unsigned char drawColor = 3;
 	signed int tValueInt;
+	signed int lambertianInt;
 
 	//DEBUG CALC
 	//FloatMathDebug();
@@ -696,20 +696,28 @@ void main(void)
 	//SETUP
 	setupRaytrace();
 
-	//Make Float - 0.5
-	makeFraction(1, 2, &half);
+	//Make fraction floats
+	makeFraction(1, 2, &half); //0.5
+	makeFraction(RESOLUTION_Y, RESOLUTION_X, &aspect); //screen aspect ratio
 
 	//set projection angle point (change Z position to change lens angle)
 	fillVectorValues(&projPoint, 0, 0, -1);
 
 	//set Sphere center and radius
-	fillVectorValues(&sphereCenter, 0, 0, 5);
+	fillVectorValues(&sphereCenter, 0, 0, 3);
 	makeFPImmediate(2, &sphereRadius);
 
+	//set light position
+	fillVectorValues(&lightPosition, 4, 4, -1);
+
+
+	//only render part of screen
+	xStartEnd = 0; 
+	yStartEnd = 0;
 
 	// RENDER LOOP	
-	for (y = 0; y < 200; y++) {
-		for (x = 0; x < 160; x++) {
+	for (y = yStartEnd; y < (RESOLUTION_Y - yStartEnd); y++) {
+		for (x = xStartEnd; x < (RESOLUTION_X - xStartEnd); x++) {
 
 			//Calculate origin vector at pixel
 			calcOrigin(x, y, &rayOrigin);
@@ -721,27 +729,70 @@ void main(void)
 			// calculate ray intersection distance
 			sphereIntersect(&rayOrigin, &rayDirection, &sphereCenter, &sphereRadius, &tValue);
 			
-
+			// check if we actually hit anything before calculating intersection point 
 			loadFAC1fromMem(&tValue);
-			FAC1toInt(&tValueInt);
-			//HER ER DET AVRUNDINGSFEIL VED HELTALL (3 -> 2)
-			
+			FAC1toInt(&tValueInt); 	//ROUNDING IS FAILING AT SOME WHOLE NUMBERS (3 -> 2 at center f.inst.)
+						
+			// HIT
 			if (tValueInt >= 0) {
-				drawPixelMBM(x, y, 3);
+				//get intersection point using distance t
+				calcIntersectionPoint(&rayOrigin, &rayDirection, &tValue, &intersectionPoint);
+				//calculate normalized point-to-light vector
+				vectorSubtraction(&lightPosition, &intersectionPoint, &pointToLightVec);
+				normalizeVector(&pointToLightVec, &pointToLightVec);
+				//calculate point normal
+				vectorSubtraction(&intersectionPoint, &sphereCenter, &pointNormalVec);
+				normalizeVector(&pointNormalVec, &pointNormalVec);
+				//get lambertian (0-1) and multiply by 100 to get 0-100 integer
+				dotProduct(&pointToLightVec, &pointNormalVec, &lambertian);
+				loadFAC1fromMem(&lambertian);
+				multiplyFAC1by10();
+				multiplyFAC1by10();
+				FAC1toInt(&lambertianInt);
+				
+				//choose render color defined by lambertian value
+				//COLOR 1
+				if (lambertianInt < 17) {
+					//DITHER (0 and 1)
+					yDiv = div(y, 2);
+					xDiv = div(x+yDiv.rem, 2);
+					if (xDiv.rem == 0) { drawColor = 0;	}
+					else { drawColor = 1; }
+				}
+				//COLOR 2
+				else if (lambertianInt < 35) {
+					drawColor = 1;
+				}
+				//COLOR 3
+				else if (lambertianInt < 53) {
+					//DITHER (1 and 2)
+					yDiv = div(y, 2);
+					xDiv = div(x + yDiv.rem, 2);
+					if (xDiv.rem == 0) { drawColor = 1; }
+					else { drawColor = 2; }
+				}
+				//COLOR 4
+				else if (lambertianInt < 71) {
+					drawColor = 2;
+				}
+				//COLOR 5
+				else if (lambertianInt < 89) {
+					//DITHER (2 and 3)
+					yDiv = div(y, 2);
+					xDiv = div(x + yDiv.rem, 2);
+					if (xDiv.rem == 0) { drawColor = 2; }
+					else { drawColor = 3; }
+				}
+				//COLOR 6
+				else {
+					drawColor = 3;
+				}
+				drawPixelMBM(x, y, drawColor);
 			}
+			// MISS
 			else {
-				drawPixelMBM(x, y, 1);
+				//drawPixelMBM(x, y, 0);
 			}
-
-			
-			//tValue holds distance from origin to intersection point
-			//TODO:
-			//Velg mellom floating point debug og render
-			//Test rendering with single color (need pixel plot)
-			//Add intersection point (origin + rayDirection * tValue)
-			//Add normal calculation (sphere center - intersection point)
-			//Add lambertian shading
-			//Choose color according to labertian value (0.00-0.25, 0.25-0.50, 0.50-0.75, 0.75-1.00)
 		}
 	}
 	for (;;); // loop forever, never ends

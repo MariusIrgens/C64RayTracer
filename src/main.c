@@ -708,7 +708,7 @@ void main(void)
 	makeFPImmediate(2, &sphereRadius);
 
 	//set light position
-	fillVectorValues(&lightPosition, 4, 4, -1);
+	fillVectorValues(&lightPosition, 4, 4, -2);
 
 
 	//only render part of screen

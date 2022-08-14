@@ -8,3 +8,9 @@ Its written in C (with lots of inline assembly) and uses the cc65 compiler. Espe
 
 For the floating point arithmetic I am using the FAC1 and FAC2 in the zero-pages, together with Kernel and Basic ROM subroutine calls that performs the calculations.
 
+Check out the C64SphereRender.png file for an example render. 
+
+PS: The rendering takes about 20 minutes when running VINWICE on 100x speed (10000%). So rendering this at normal speed would take around 40 hours.
+I did not try to optimize it yet, but I am not sure how optimized I could make it since it is mostly using the internal floating point subroutines anyway.
+I guess I could make my own floating point interpretation, but I am not sure I could beat (or even match) the internal one.
+

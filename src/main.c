@@ -698,7 +698,7 @@ void main(void)
 
 	//Make fraction floats
 	makeFraction(1, 2, &half); //0.5
-	makeFraction(RESOLUTION_Y, RESOLUTION_X, &aspect); //screen aspect ratio
+	makeFraction(RESOLUTION_X*2, RESOLUTION_Y, &aspect); //screen aspect ratio
 
 	//set projection angle point (change Z position to change lens angle)
 	fillVectorValues(&projPoint, 0, 0, -1);
@@ -708,7 +708,7 @@ void main(void)
 	makeFPImmediate(2, &sphereRadius);
 
 	//set light position
-	fillVectorValues(&lightPosition, 4, 4, -2);
+	fillVectorValues(&lightPosition, 1, 3, -2);
 
 
 	//only render part of screen

@@ -1,29 +1,10 @@
 ========================================================================
-    MAKEFILE PROJECT : CC65Test Project Overview
+   C64 RAYTRACER BY MARIUS IRGENS
 ========================================================================
 
-AppWizard has created this CC65Test project for you.  
+So far it is only doing sphere/ray intersection and lambertian shading. In the future I will try other ray tracing algorithms.
 
-This file contains a summary of what you will find in each of the files that
-make up your CC65Test project.
+Its written in C (with lots of inline assembly) and uses the cc65 compiler. Especially the floating point aritmetic functions is written in assembly.
 
+For the floating point arithmetic I am using the FAC1 and FAC2 in the zero-pages, together with Kernel and Basic ROM subroutine calls that performs the calculations.
 
-CC65Test.vcxproj
-    This is the main project file for VC++ projects generated using an Application Wizard. 
-    It contains information about the version of Visual C++ that generated the file, and 
-    information about the platforms, configurations, and project features selected with the
-    Application Wizard.
-
-CC65Test.vcxproj.filters
-    This is the filters file for VC++ projects generated using an Application Wizard. 
-    It contains information about the association between the files in your project 
-    and the filters. This association is used in the IDE to show grouping of files with
-    similar extensions under a specific node (for e.g. ".cpp" files are associated with the
-    "Source Files" filter).
-
-This project allows you to build/clean/rebuild from within Visual Studio by calling the commands you have input 
-in the wizard. The build command can be nmake or any other tool you use.
-
-This project does not contain any files, so there are none displayed in Solution Explorer.
-
-/////////////////////////////////////////////////////////////////////////////

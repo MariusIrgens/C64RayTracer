@@ -41,13 +41,16 @@ unsigned char adressLow;
 unsigned char adressHigh;
 unsigned char numberLow;
 unsigned char numberHigh;
-struct vector3 tempVector;
 struct floatingPoint tempFPx;
 struct floatingPoint tempFPy;
 struct floatingPoint tempFPz;
 struct floatingPoint half;
 struct floatingPoint aspect;
 struct floatingPoint MINIMUM_HIT_DISTANCE;
+struct floatingPoint smallStepFP;
+struct vector3 tempVector;
+struct vector3 smallStepVec;
+struct vector3 gradients;
 div_t xDiv;
 div_t yDiv;
 
@@ -581,7 +584,66 @@ void mapTheWorld(unsigned int point, unsigned int destAdress) {
 
 	loadFAC1fromMem(&distanceToClosest);		//return distanceToClosest
 	storeFAC1InMem(destAdress);
+}
 
+void calcNormalSDF(unsigned int point, unsigned int destAdress) {
+
+	//float gradient_x = map_the_world(point + (smallstep, 0, 0) - map_the_world(point - (smallstep, 0, 0));
+	
+	//(smallstep, 0, 0)
+	fillVectorValues(&smallStepVec, 0, 0, 0);	//Empty smallStep Vector
+	loadFAC1fromMem(&smallStepFP);				//Load small step 0.2
+	storeFAC1InMem(&smallStepVec);				//smallStep vector = (smallStep, 0, 0)
+	//(point + (smallstep, 0, 0))
+	vectorAddition(point, &smallStepVec, &tempVector);
+	//map_the_world(point + (smallstep, 0, 0))
+	mapTheWorld(&tempVector, &tempFPx);
+	//(point - (smallstep, 0, 0))
+	vectorSubtraction(point, &smallStepVec, &tempVector);
+	//map_the_world(point - (smallstep, 0, 0))
+	mapTheWorld(&tempVector, &tempFPy);
+	loadFAC2fromMem(&tempFPx);
+	loadFAC1fromMem(&tempFPy);
+	subtractFACs();
+	storeFAC1InMem(destAdress);
+
+
+	//float gradient_y = map_the_world(point + (0, smallstep, 0)) - map_the_world(point - (0, smallstep, 0));
+
+	fillVectorValues(&smallStepVec, 0, 0, 0);	//Empty smallStep Vector
+	loadFAC1fromMem(&smallStepFP);				//Load small step 0.2
+	storeFAC1InMem(&smallStepVec + 5);			//smallStep vector = (0, smallStep, 0)
+	//(point + (0, smallstep, 0))
+	vectorAddition(point, &smallStepVec, &tempVector);
+	//map_the_world(point + (0, smallstep, 0))
+	mapTheWorld(&tempVector, &tempFPx);
+	//(point - (0, smallstep, 0))
+	vectorSubtraction(point, &smallStepVec, &tempVector);
+	//map_the_world(point - (0, smallstep, 0))
+	mapTheWorld(&tempVector, &tempFPy);
+	loadFAC2fromMem(&tempFPx);
+	loadFAC1fromMem(&tempFPy);
+	subtractFACs();
+	storeFAC1InMem(destAdress + 5);
+
+
+	//float gradient_z = map_the_world(point + (0, 0, smallstep)) - map_the_world(point - (0, 0, smallstep));
+
+	fillVectorValues(&smallStepVec, 0, 0, 0);	//Empty smallStep Vector
+	loadFAC1fromMem(&smallStepFP);				//Load small step 0.2
+	storeFAC1InMem(&smallStepVec + 10);			//smallStep vector = (0, 0, smallStep)
+	//(point + (0, 0, smallstep))
+	vectorAddition(point, &smallStepVec, &tempVector);
+	//map_the_world(point + (0, 0, smallstep))
+	mapTheWorld(&tempVector, &tempFPx);
+	//(point - (0, 0, smallstep))
+	vectorSubtraction(point, &smallStepVec, &tempVector);
+	//map_the_world(point - (0, 0, smallstep))
+	mapTheWorld(&tempVector, &tempFPy);
+	loadFAC2fromMem(&tempFPx);
+	loadFAC1fromMem(&tempFPy);
+	subtractFACs();
+	storeFAC1InMem(destAdress + 10);
 }
 
 void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
@@ -800,6 +862,7 @@ void main(void)
 	makeFraction(1, 2, &half); //0.5
 	makeFraction(RESOLUTION_X*2, RESOLUTION_Y, &aspect); //screen aspect ratio
 	makeFraction(1, MINIMUM_HIT_DISTANCE_FACTOR, &MINIMUM_HIT_DISTANCE); //0.1
+	makeFraction(1, 5, &smallStepFP); //0.2
 
 
 	//set projection angle point (change Z position to change lens angle)
@@ -814,8 +877,8 @@ void main(void)
 
 
 	//only render part of screen
-	xStartEnd = 50; 
-	yStartEnd = 50;
+	xStartEnd = 35; 
+	yStartEnd = 39;
 
 	// RENDER LOOP	
 	for (y = yStartEnd; y < (RESOLUTION_Y - yStartEnd); y++) {
@@ -849,10 +912,9 @@ void main(void)
 				normalizeVector(&pointToLightVec, &pointToLightVec);
 				//calculate point normal (METHOD 1)
 				//vectorSubtraction(&intersectionPoint, &sphereCenter, &pointNormalVec);
-				//normalizeVector(&pointNormalVec, &pointNormalVec);
 				//calculate point normal (METHOD 2)
-				fillVectorValues(&pointNormalVec, 0, 0, 3);
-				
+				calcNormalSDF(&intersectionPoint, &pointNormalVec);
+				normalizeVector(&pointNormalVec, &pointNormalVec);
 				//get lambertian (0-1) and multiply by 100 to get 0-100 integer
 				dotProduct(&pointToLightVec, &pointNormalVec, &lambertian);
 				loadFAC1fromMem(&lambertian);
@@ -860,7 +922,7 @@ void main(void)
 				multiplyFAC1by10();
 				FAC1toInt(&lambertianInt);
 				//TEST
-				lambertianInt = 99;
+				//lambertianInt = 99;
 				
 				//choose render color defined by lambertian value
 				//COLOR 1

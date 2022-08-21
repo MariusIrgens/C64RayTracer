@@ -10,8 +10,8 @@
 #define ORIGIN_Z 0
 #define MYCOLORS 0xFC	// color 2, color 1
 #define MYCOLORS2 0x01	// unused, color 3
-#define NUMBER_OF_STEPS 128
-#define MAX_TRACE_DISTANCE 50
+#define NUMBER_OF_STEPS 80
+#define MAX_TRACE_DISTANCE 5
 #define MINIMUM_HIT_DISTANCE_FACTOR 10
 
 
@@ -126,7 +126,7 @@ void subtractFACs() {
 
 void subtractFAC1Mem(unsigned int adress) {
 	LoadRegAYwithAdress(adress);
-	__asm__("jsr $b850"); //subtract - FAC1 from value at mem adress
+	__asm__("jsr $b850"); //subtract - FAC1 from value at mem adress (mem-FAC1)
 }
 
 void multiplyFACs() {
@@ -552,12 +552,20 @@ void calcJumpPoint(unsigned int ro, unsigned int rd, unsigned int t, unsigned in
 
 void distanceFromSphere(unsigned int point, unsigned int sphereCenter, unsigned int sphereRadius, unsigned int destAdress) {
 	// length(point - sphere_center) - sphere_radius;
+	
 	//(point - sphere_center)
 	vectorSubtraction(point, sphereCenter, &tempVector);
-	//(point - sphere_center) - sphere_radius
-	vectorSubtraction(&tempVector, sphereRadius, &tempVector);
-	// length(point - sphere_center) - sphere_radius;
-	vectorLength(&tempVector, destAdress);
+
+	// length(point - sphere_center)
+	vectorLength(&tempVector, &tempFPx);
+
+	// (length(point - sphere_center)) - sphere_radius;
+
+	// FAC2	- FAC1
+	loadFAC2fromMem(&tempFPx);			//(length(point - sphere_center))
+	loadFAC1fromMem(sphereRadius);		//sphere_radius
+	subtractFACs();
+	storeFAC1InMem(destAdress);
 
 }
 
@@ -591,6 +599,7 @@ void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
 	for (i = 0; i < NUMBER_OF_STEPS; i++) {
 		calcJumpPoint(ro, rd, &totalDistanceTraveled, &currentPosition);		//current_position = ray_origin + total_distance_traveled * ray_direction;
 		mapTheWorld(&currentPosition, &distanceToClosest);						//distance_to_closest = map_the_world(current_position);
+		
 		loadFAC1fromMem(&totalDistanceTraveled);								//total_distance_traveled += distance_to_closest;
 		addFAC1Mem(&distanceToClosest);											//
 		storeFAC1InMem(&totalDistanceTraveled);									//
@@ -604,13 +613,15 @@ void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
 			storeFAC1InMem(destAdress);											//return totalDistanceTraveled
 			return;
 		}
+
 		loadFAC1fromMem(&totalDistanceTraveled);
 		FAC1toInt(&totalDistanceTraveledInt);
 		if (totalDistanceTraveledInt > MAX_TRACE_DISTANCE) {
+			makeFPImmediate(-1, destAdress);
 			return;
 		}
 	}
-	makeFPImmediate(1, destAdress);
+	makeFPImmediate(-1, destAdress);
 }
 
 //Draw pixel while using multicolor bitmap mode
@@ -803,8 +814,8 @@ void main(void)
 
 
 	//only render part of screen
-	xStartEnd = 0; 
-	yStartEnd = 0;
+	xStartEnd = 50; 
+	yStartEnd = 50;
 
 	// RENDER LOOP	
 	for (y = yStartEnd; y < (RESOLUTION_Y - yStartEnd); y++) {
@@ -824,7 +835,7 @@ void main(void)
 			//METHOD 2: SDF LOOP
 			SDFRaymarch(&rayOrigin, &rayDirection, &tValue);
 
-			
+
 			// check if we actually hit anything before calculating intersection point 
 			loadFAC1fromMem(&tValue);
 			FAC1toInt(&tValueInt);
@@ -848,6 +859,8 @@ void main(void)
 				multiplyFAC1by10();
 				multiplyFAC1by10();
 				FAC1toInt(&lambertianInt);
+				//TEST
+				lambertianInt = 99;
 				
 				//choose render color defined by lambertian value
 				//COLOR 1
@@ -890,7 +903,7 @@ void main(void)
 			}
 			// MISS
 			else {
-				//drawPixelMBM(x, y, 0);
+				drawPixelMBM(x, y, 1);
 			}
 		}
 	}

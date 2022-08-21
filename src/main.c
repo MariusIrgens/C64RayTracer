@@ -564,11 +564,15 @@ void distanceFromSphere(unsigned int point, unsigned int sphereCenter, unsigned 
 void mapTheWorld(unsigned int point, unsigned int destAdress) {
 	struct vector3 sphereCenter;
 	struct floatingPoint sphereRadius;
+	struct floatingPoint distanceToClosest;
 	fillVectorValues(&sphereCenter, 0, 0, 3);
 	makeFPImmediate(2, &sphereRadius);
 
 	//distance_to_closest = distance_from_sphere(point, sphere.center, sphere.radius));
-	distanceFromSphere(point, &sphereCenter, &sphereRadius, )
+	distanceFromSphere(point, &sphereCenter, &sphereRadius, &distanceToClosest);
+
+	loadFAC1fromMem(&distanceToClosest);		//return distanceToClosest
+	storeFAC1InMem(destAdress);
 
 }
 
@@ -598,12 +602,12 @@ void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
 		if (distanceToClosestInt < 1) {											//Check if minimum distance has been reached
 			loadFAC1fromMem(&totalDistanceTraveled);
 			storeFAC1InMem(destAdress);											//return totalDistanceTraveled
-			break;
+			return;
 		}
 		loadFAC1fromMem(&totalDistanceTraveled);
 		FAC1toInt(&totalDistanceTraveledInt);
 		if (totalDistanceTraveledInt > MAX_TRACE_DISTANCE) {
-			break;
+			return;
 		}
 	}
 	makeFPImmediate(-1, destAdress);
@@ -836,6 +840,7 @@ void main(void)
 				//vectorSubtraction(&intersectionPoint, &sphereCenter, &pointNormalVec);
 				//normalizeVector(&pointNormalVec, &pointNormalVec);
 				//calculate point normal (METHOD 2)
+				fillVectorValues(&pointNormalVec, 0, 0, 3);
 				
 				//get lambertian (0-1) and multiply by 100 to get 0-100 integer
 				dotProduct(&pointToLightVec, &pointNormalVec, &lambertian);

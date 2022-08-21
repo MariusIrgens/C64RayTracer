@@ -610,7 +610,7 @@ void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
 			return;
 		}
 	}
-	makeFPImmediate(-1, destAdress);
+	makeFPImmediate(1, destAdress);
 }
 
 //Draw pixel while using multicolor bitmap mode

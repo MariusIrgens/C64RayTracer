@@ -358,7 +358,7 @@ void calcOrigin(unsigned int x, unsigned int y, unsigned int destAdress) {
 	subtractFACs();						// (FAC2 - FAC1)
 	// ((x / resolution) -0.5) * 2
 	storeFAC1InMem(&tempFPx);
-	loadFAC1Immediate(2);
+	loadFAC1Immediate(-2);				// -2 = flip image
 	multiplyFAC1Mem(&tempFPx);
 	multiplyFAC1Mem(&aspect);			// Make up for resolution difference
 	storeFAC1InMem(destAdress);
@@ -373,9 +373,9 @@ void calcOrigin(unsigned int x, unsigned int y, unsigned int destAdress) {
 	moveFAC1toFAC2();
 	loadFAC1fromMem(&half);
 	subtractFACs();
-	// ((y / resolution) -0.5) * -2		// -2 = flip image
+	// ((y / resolution) -0.5) * -2		
 	storeFAC1InMem(&tempFPy);
-	loadFAC1Immediate(-2);
+	loadFAC1Immediate(2);				// -2 = flip image
 	multiplyFAC1Mem(&tempFPy);
 	storeFAC1InMem(destAdress + 5);
 
@@ -592,7 +592,7 @@ void calcNormalSDF(unsigned int point, unsigned int destAdress) {
 	
 	//(smallstep, 0, 0)
 	fillVectorValues(&smallStepVec, 0, 0, 0);	//Empty smallStep Vector
-	loadFAC1fromMem(&smallStepFP);				//Load small step 0.2
+	loadFAC1fromMem(&smallStepFP);				//Load small step
 	storeFAC1InMem(&smallStepVec);				//smallStep vector = (smallStep, 0, 0)
 	//(point + (smallstep, 0, 0))
 	vectorAddition(point, &smallStepVec, &tempVector);
@@ -604,14 +604,14 @@ void calcNormalSDF(unsigned int point, unsigned int destAdress) {
 	mapTheWorld(&tempVector, &tempFPy);
 	loadFAC2fromMem(&tempFPx);
 	loadFAC1fromMem(&tempFPy);
-	subtractFACs();
+	subtractFACs();								 //(FAC2 - FAC1)
 	storeFAC1InMem(destAdress);
 
 
 	//float gradient_y = map_the_world(point + (0, smallstep, 0)) - map_the_world(point - (0, smallstep, 0));
 
 	fillVectorValues(&smallStepVec, 0, 0, 0);	//Empty smallStep Vector
-	loadFAC1fromMem(&smallStepFP);				//Load small step 0.2
+	loadFAC1fromMem(&smallStepFP);				//Load small step
 	storeFAC1InMem(&smallStepVec + 5);			//smallStep vector = (0, smallStep, 0)
 	//(point + (0, smallstep, 0))
 	vectorAddition(point, &smallStepVec, &tempVector);
@@ -630,7 +630,7 @@ void calcNormalSDF(unsigned int point, unsigned int destAdress) {
 	//float gradient_z = map_the_world(point + (0, 0, smallstep)) - map_the_world(point - (0, 0, smallstep));
 
 	fillVectorValues(&smallStepVec, 0, 0, 0);	//Empty smallStep Vector
-	loadFAC1fromMem(&smallStepFP);				//Load small step 0.2
+	loadFAC1fromMem(&smallStepFP);				//Load small step
 	storeFAC1InMem(&smallStepVec + 10);			//smallStep vector = (0, 0, smallStep)
 	//(point + (0, 0, smallstep))
 	vectorAddition(point, &smallStepVec, &tempVector);
@@ -668,6 +668,7 @@ void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
 
 		loadFAC1fromMem(&distanceToClosest);									//Convert floatingpoint to int for comparison
 		multiplyFAC1by10();														//Check below 0.1 (multiply more for different minimum distances)
+		multiplyFAC1by10();														//Check below 0.01 (multiply more for different minimum distances)
 		FAC1toInt(&distanceToClosestInt);										//
 
 		if (distanceToClosestInt < 1) {											//Check if minimum distance has been reached
@@ -675,7 +676,7 @@ void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
 			storeFAC1InMem(destAdress);											//return totalDistanceTraveled
 			return;
 		}
-
+		// Check for MISS (gone past max distance)
 		loadFAC1fromMem(&totalDistanceTraveled);
 		FAC1toInt(&totalDistanceTraveledInt);
 		if (totalDistanceTraveledInt > MAX_TRACE_DISTANCE) {
@@ -862,7 +863,7 @@ void main(void)
 	makeFraction(1, 2, &half); //0.5
 	makeFraction(RESOLUTION_X*2, RESOLUTION_Y, &aspect); //screen aspect ratio
 	makeFraction(1, MINIMUM_HIT_DISTANCE_FACTOR, &MINIMUM_HIT_DISTANCE); //0.1
-	makeFraction(1, 5, &smallStepFP); //0.2
+	makeFraction(1, 200, &smallStepFP); //0.01
 
 
 	//set projection angle point (change Z position to change lens angle)
@@ -873,7 +874,8 @@ void main(void)
 	//makeFPImmediate(2, &sphereRadius);
 
 	//set light position
-	fillVectorValues(&lightPosition, 1, 3, -2);
+	fillVectorValues(&lightPosition, 0, 0, 1);		//WTF!
+	//fillVectorValues(&lightPosition, 1, 3, -2);
 
 
 	//only render part of screen
@@ -904,7 +906,7 @@ void main(void)
 			FAC1toInt(&tValueInt);
 						
 			// HIT
-			if (tValueInt >= 0) {
+			if (tValueInt > 0) {
 				//get intersection point using distance t
 				calcJumpPoint(&rayOrigin, &rayDirection, &tValue, &intersectionPoint);
 				//calculate normalized point-to-light vector
@@ -965,7 +967,7 @@ void main(void)
 			}
 			// MISS
 			else {
-				drawPixelMBM(x, y, 1);
+				//drawPixelMBM(x, y, 0);
 			}
 		}
 	}

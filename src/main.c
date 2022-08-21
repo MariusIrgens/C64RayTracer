@@ -3,13 +3,17 @@
 #include <conio.h>
 #include <peekpoke.h>
 
+#define vicBankAdress 0x4000
+#define bitmapAdress 0x6000
 #define RESOLUTION_X 160
 #define RESOLUTION_Y 200
 #define ORIGIN_Z 0
 #define MYCOLORS 0xFC	// color 2, color 1
 #define MYCOLORS2 0x01	// unused, color 3
-#define vicBankAdress 0x4000
-#define bitmapAdress 0x6000
+#define NUMBER_OF_STEPS 128
+#define MAX_TRACE_DISTANCE 50
+#define MINIMUM_HIT_DISTANCE_FACTOR 10
+
 
 // STRUCTS
 
@@ -37,16 +41,18 @@ unsigned char adressLow;
 unsigned char adressHigh;
 unsigned char numberLow;
 unsigned char numberHigh;
+struct vector3 tempVector;
 struct floatingPoint tempFPx;
 struct floatingPoint tempFPy;
 struct floatingPoint tempFPz;
 struct floatingPoint half;
 struct floatingPoint aspect;
+struct floatingPoint MINIMUM_HIT_DISTANCE;
 div_t xDiv;
 div_t yDiv;
 
 
-// FLOATING POINT MATH - using Basic and Kernal ROM routines called from assembly
+// FLOATING POINT MATH - using C64 Basic and Kernal ROM routines called with assembly
 // Made by Marius Irgens, but based on this awesome documentation:
 // https://codebase64.org/doku.php?id=base:kernal_floating_point_mathematics
 
@@ -192,6 +198,20 @@ void printVectorValues(unsigned int vecAdress) {
 	cprintf(" , z: ");
 	printFP(vecAdress + 10);
 	//cprintf("\n \r");
+}
+
+void vectorCopy(unsigned int sourceAdress, unsigned int destAdress) {
+	//Load source.x and store it in dest.x 
+	loadFAC1fromMem(sourceAdress);
+	storeFAC1InMem(destAdress);
+
+	//Load source.y and store it in dest.y
+	loadFAC1fromMem(sourceAdress + 5);
+	storeFAC1InMem(destAdress + 5);
+
+	//Load source.z and store it in dest.z 
+	loadFAC1fromMem(sourceAdress + 10);
+	storeFAC1InMem(destAdress + 10);
 }
 
 void vectorAddition(unsigned int vecAdressA, unsigned int vecAdressB, unsigned int destAdress) {
@@ -360,6 +380,8 @@ void calcOrigin(unsigned int x, unsigned int y, unsigned int destAdress) {
 	storeFAC1InMem(destAdress + 10);
 }
 
+//Calculate Sphere-Ray intersection point distance (nearest, if any).
+//Based on the algorithm in the book "Mathematics for 3D game programming and computer graphics (3rd edition)"
 void sphereIntersect(unsigned int ro, unsigned int rd, unsigned int sc, unsigned int sr, unsigned int destAdress) {
 	//ro = ray origin
 	//rd = ray direction
@@ -518,10 +540,73 @@ void sphereIntersect(unsigned int ro, unsigned int rd, unsigned int sc, unsigned
 	}
 }
 
-void calcIntersectionPoint(unsigned int ro, unsigned int rd, unsigned int t, unsigned int destAdress) {
+void calcJumpPoint(unsigned int ro, unsigned int rd, unsigned int t, unsigned int destAdress) {
 	// rayOrigin + rayDirection * t
 	vectorMultiplyByMem(rd, t, destAdress); // rayDirection * t
 	vectorAddition(ro, destAdress, destAdress); // add ro
+}
+
+//METHOD 2 FUNCTIONS
+//Calculate Ray intersection point distance using the Signed Distance Function method, as popularized by Inigo Quilez
+//https://iquilezles.org
+
+void distanceFromSphere(unsigned int point, unsigned int sphereCenter, unsigned int sphereRadius, unsigned int destAdress) {
+	// length(point - sphere_center) - sphere_radius;
+	//(point - sphere_center)
+	vectorSubtraction(point, sphereCenter, &tempVector);
+	//(point - sphere_center) - sphere_radius
+	vectorSubtraction(&tempVector, sphereRadius, &tempVector);
+	// length(point - sphere_center) - sphere_radius;
+	vectorLength(&tempVector, destAdress);
+
+}
+
+void mapTheWorld(unsigned int point, unsigned int destAdress) {
+	struct vector3 sphereCenter;
+	struct floatingPoint sphereRadius;
+	fillVectorValues(&sphereCenter, 0, 0, 3);
+	makeFPImmediate(2, &sphereRadius);
+
+	//distance_to_closest = distance_from_sphere(point, sphere.center, sphere.radius));
+	distanceFromSphere(point, &sphereCenter, &sphereRadius, )
+
+}
+
+void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
+	unsigned int i;
+	struct floatingPoint totalDistanceTraveled;
+	struct floatingPoint distanceToClosest;
+	struct vector3 currentPosition;
+	signed int distanceToClosestInt;
+	signed int totalDistanceTraveledInt;
+
+	makeFPImmediate(0, &totalDistanceTraveled);									//totalDistanceTraveled = 0;
+	vectorCopy(ro, &currentPosition);											//currentPosition = ray origin;
+	makeFPImmediate(MAX_TRACE_DISTANCE, &distanceToClosest);					//distanceToClosest = MAX_TRACE_DISTANCE;
+
+	for (i = 0; i < NUMBER_OF_STEPS; i++) {
+		calcJumpPoint(ro, rd, &totalDistanceTraveled, &currentPosition);		//current_position = ray_origin + total_distance_traveled * ray_direction;
+		mapTheWorld(&currentPosition, &distanceToClosest);						//distance_to_closest = map_the_world(current_position);
+		loadFAC1fromMem(&totalDistanceTraveled);								//total_distance_traveled += distance_to_closest;
+		addFAC1Mem(&distanceToClosest);											//
+		storeFAC1InMem(&totalDistanceTraveled);									//
+
+		loadFAC1fromMem(&distanceToClosest);									//Convert floatingpoint to int for comparison
+		multiplyFAC1by10();														//Check below 0.1 (multiply more for different minimum distances)
+		FAC1toInt(&distanceToClosestInt);										//
+
+		if (distanceToClosestInt < 1) {											//Check if minimum distance has been reached
+			loadFAC1fromMem(&totalDistanceTraveled);
+			storeFAC1InMem(destAdress);											//return totalDistanceTraveled
+			break;
+		}
+		loadFAC1fromMem(&totalDistanceTraveled);
+		FAC1toInt(&totalDistanceTraveledInt);
+		if (totalDistanceTraveledInt > MAX_TRACE_DISTANCE) {
+			break;
+		}
+	}
+	makeFPImmediate(-1, destAdress);
 }
 
 //Draw pixel while using multicolor bitmap mode
@@ -699,13 +784,15 @@ void main(void)
 	//Make fraction floats
 	makeFraction(1, 2, &half); //0.5
 	makeFraction(RESOLUTION_X*2, RESOLUTION_Y, &aspect); //screen aspect ratio
+	makeFraction(1, MINIMUM_HIT_DISTANCE_FACTOR, &MINIMUM_HIT_DISTANCE); //0.1
+
 
 	//set projection angle point (change Z position to change lens angle)
 	fillVectorValues(&projPoint, 0, 0, -1);
 
-	//set Sphere center and radius
-	fillVectorValues(&sphereCenter, 0, 0, 3);
-	makeFPImmediate(2, &sphereRadius);
+	//set Sphere center and radius (METHOD 1)
+	//fillVectorValues(&sphereCenter, 0, 0, 3);
+	//makeFPImmediate(2, &sphereRadius);
 
 	//set light position
 	fillVectorValues(&lightPosition, 1, 3, -2);
@@ -726,23 +813,30 @@ void main(void)
 			vectorSubtraction(&rayOrigin, &projPoint, &rayDirection);
 			normalizeVector(&rayDirection, &rayDirection);
 
-			// calculate ray intersection distance
-			sphereIntersect(&rayOrigin, &rayDirection, &sphereCenter, &sphereRadius, &tValue);
+			
+			//METHOD 1: RAY-SPHERE INTERSECTION DISTANCE
+			//sphereIntersect(&rayOrigin, &rayDirection, &sphereCenter, &sphereRadius, &tValue);
+
+			//METHOD 2: SDF LOOP
+			SDFRaymarch(&rayOrigin, &rayDirection, &tValue);
+
 			
 			// check if we actually hit anything before calculating intersection point 
 			loadFAC1fromMem(&tValue);
-			FAC1toInt(&tValueInt); 	//ROUNDING IS FAILING AT SOME WHOLE NUMBERS (3 -> 2 at center f.inst.)
+			FAC1toInt(&tValueInt);
 						
 			// HIT
 			if (tValueInt >= 0) {
 				//get intersection point using distance t
-				calcIntersectionPoint(&rayOrigin, &rayDirection, &tValue, &intersectionPoint);
+				calcJumpPoint(&rayOrigin, &rayDirection, &tValue, &intersectionPoint);
 				//calculate normalized point-to-light vector
 				vectorSubtraction(&lightPosition, &intersectionPoint, &pointToLightVec);
 				normalizeVector(&pointToLightVec, &pointToLightVec);
-				//calculate point normal
-				vectorSubtraction(&intersectionPoint, &sphereCenter, &pointNormalVec);
-				normalizeVector(&pointNormalVec, &pointNormalVec);
+				//calculate point normal (METHOD 1)
+				//vectorSubtraction(&intersectionPoint, &sphereCenter, &pointNormalVec);
+				//normalizeVector(&pointNormalVec, &pointNormalVec);
+				//calculate point normal (METHOD 2)
+				
 				//get lambertian (0-1) and multiply by 100 to get 0-100 integer
 				dotProduct(&pointToLightVec, &pointNormalVec, &lambertian);
 				loadFAC1fromMem(&lambertian);

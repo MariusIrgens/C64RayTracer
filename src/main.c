@@ -11,7 +11,7 @@
 #define MYCOLORS 0xFC	// color 2, color 1
 #define MYCOLORS2 0x01	// unused, color 3
 #define NUMBER_OF_STEPS 80
-#define MAX_TRACE_DISTANCE 5
+#define MAX_TRACE_DISTANCE 50
 #define MINIMUM_HIT_DISTANCE_FACTOR 10
 
 
@@ -48,9 +48,13 @@ struct floatingPoint half;
 struct floatingPoint aspect;
 struct floatingPoint MINIMUM_HIT_DISTANCE;
 struct floatingPoint smallStepFP;
+struct floatingPoint sphereRadius;
+struct floatingPoint distanceToClosest;
 struct vector3 tempVector;
-struct vector3 smallStepVec;
-struct vector3 gradients;
+struct vector3 sphereCenter;
+struct vector3 smallStepVecX;
+struct vector3 smallStepVecY;
+struct vector3 smallStepVecZ;
 div_t xDiv;
 div_t yDiv;
 
@@ -573,77 +577,11 @@ void distanceFromSphere(unsigned int point, unsigned int sphereCenter, unsigned 
 }
 
 void mapTheWorld(unsigned int point, unsigned int destAdress) {
-	struct vector3 sphereCenter;
-	struct floatingPoint sphereRadius;
-	struct floatingPoint distanceToClosest;
-	fillVectorValues(&sphereCenter, 0, 0, 3);
-	makeFPImmediate(2, &sphereRadius);
-
+	
 	//distance_to_closest = distance_from_sphere(point, sphere.center, sphere.radius));
 	distanceFromSphere(point, &sphereCenter, &sphereRadius, &distanceToClosest);
-
 	loadFAC1fromMem(&distanceToClosest);		//return distanceToClosest
 	storeFAC1InMem(destAdress);
-}
-
-void calcNormalSDF(unsigned int point, unsigned int destAdress) {
-
-	//float gradient_x = map_the_world(point + (smallstep, 0, 0)) - map_the_world(point - (smallstep, 0, 0));
-	
-	//(smallstep, 0, 0)
-	fillVectorValues(&smallStepVec, 0, 0, 0);	//Empty smallStep Vector
-	loadFAC1fromMem(&smallStepFP);				//Load small step
-	storeFAC1InMem(&smallStepVec);				//smallStep vector = (smallStep, 0, 0)
-	//(point + (smallstep, 0, 0))
-	vectorAddition(point, &smallStepVec, &tempVector);
-	//map_the_world(point + (smallstep, 0, 0))
-	mapTheWorld(&tempVector, &tempFPx);
-	//(point - (smallstep, 0, 0))
-	vectorSubtraction(point, &smallStepVec, &tempVector);
-	//map_the_world(point - (smallstep, 0, 0))
-	mapTheWorld(&tempVector, &tempFPy);
-	loadFAC2fromMem(&tempFPx);
-	loadFAC1fromMem(&tempFPy);
-	subtractFACs();								 //(FAC2 - FAC1)
-	storeFAC1InMem(destAdress);
-
-
-	//float gradient_y = map_the_world(point + (0, smallstep, 0)) - map_the_world(point - (0, smallstep, 0));
-
-	fillVectorValues(&smallStepVec, 0, 0, 0);	//Empty smallStep Vector
-	loadFAC1fromMem(&smallStepFP);				//Load small step
-	storeFAC1InMem(&smallStepVec + 5);			//smallStep vector = (0, smallStep, 0)
-	//(point + (0, smallstep, 0))
-	vectorAddition(point, &smallStepVec, &tempVector);
-	//map_the_world(point + (0, smallstep, 0))
-	mapTheWorld(&tempVector, &tempFPx);
-	//(point - (0, smallstep, 0))
-	vectorSubtraction(point, &smallStepVec, &tempVector);
-	//map_the_world(point - (0, smallstep, 0))
-	mapTheWorld(&tempVector, &tempFPy);
-	loadFAC2fromMem(&tempFPx);
-	loadFAC1fromMem(&tempFPy);
-	subtractFACs();
-	storeFAC1InMem(destAdress + 5);
-
-
-	//float gradient_z = map_the_world(point + (0, 0, smallstep)) - map_the_world(point - (0, 0, smallstep));
-
-	fillVectorValues(&smallStepVec, 0, 0, 0);	//Empty smallStep Vector
-	loadFAC1fromMem(&smallStepFP);				//Load small step
-	storeFAC1InMem(&smallStepVec + 10);			//smallStep vector = (0, 0, smallStep)
-	//(point + (0, 0, smallstep))
-	vectorAddition(point, &smallStepVec, &tempVector);
-	//map_the_world(point + (0, 0, smallstep))
-	mapTheWorld(&tempVector, &tempFPx);
-	//(point - (0, 0, smallstep))
-	vectorSubtraction(point, &smallStepVec, &tempVector);
-	//map_the_world(point - (0, 0, smallstep))
-	mapTheWorld(&tempVector, &tempFPy);
-	loadFAC2fromMem(&tempFPx);
-	loadFAC1fromMem(&tempFPy);
-	subtractFACs();
-	storeFAC1InMem(destAdress + 10);
 }
 
 void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
@@ -666,10 +604,10 @@ void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
 		addFAC1Mem(&distanceToClosest);											//
 		storeFAC1InMem(&totalDistanceTraveled);									//
 
-		loadFAC1fromMem(&distanceToClosest);									//Convert floatingpoint to int for comparison
+		loadFAC1fromMem(&distanceToClosest);									//
 		multiplyFAC1by10();														//Check below 0.1 (multiply more for different minimum distances)
 		multiplyFAC1by10();														//Check below 0.01 (multiply more for different minimum distances)
-		FAC1toInt(&distanceToClosestInt);										//
+		FAC1toInt(&distanceToClosestInt);										//Convert floatingpoint to int for comparison
 
 		if (distanceToClosestInt < 1) {											//Check if minimum distance has been reached
 			loadFAC1fromMem(&totalDistanceTraveled);
@@ -686,6 +624,69 @@ void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
 	}
 	makeFPImmediate(-1, destAdress);
 }
+
+void calcNormalSDF(unsigned int point, unsigned int destAdress) {
+
+	//float gradient_x = map_the_world(point + (smallstep, 0, 0)) - map_the_world(point - (smallstep, 0, 0));
+
+	//(point + (smallstep, 0, 0))
+	vectorAddition(point, &smallStepVecX, &tempVector);
+	//map_the_world(point + (smallstep, 0, 0))
+	mapTheWorld(&smallStepVecX, &tempFPx);
+	//(point - (smallstep, 0, 0))
+	vectorSubtraction(point, &smallStepVecX, &tempVector);
+	//map_the_world(point - (smallstep, 0, 0))
+	mapTheWorld(&smallStepVecY, &tempFPy);
+
+	//makeFPImmediate(0, &tempFPx);
+	//makeFPImmediate(0, &tempFPy);
+
+	loadFAC2fromMem(&tempFPx);
+	loadFAC1fromMem(&tempFPy);
+	subtractFACs();								 //(FAC2 - FAC1)
+	storeFAC1InMem(destAdress);
+
+
+	//float gradient_y = map_the_world(point + (0, smallstep, 0)) - map_the_world(point - (0, smallstep, 0));
+
+	//(point + (0, smallstep, 0))
+	vectorAddition(point, &smallStepVecY, &tempVector);
+	//map_the_world(point + (0, smallstep, 0))
+	mapTheWorld(&smallStepVecY, &tempFPx);
+	//(point - (0, smallstep, 0))
+	vectorSubtraction(point, &smallStepVecY, &tempVector);
+	//map_the_world(point - (0, smallstep, 0))
+	mapTheWorld(&smallStepVecZ, &tempFPy);
+
+	//makeFPImmediate(0, &tempFPx);
+	//makeFPImmediate(0, &tempFPy);
+
+	loadFAC2fromMem(&tempFPx);
+	loadFAC1fromMem(&tempFPy);
+	subtractFACs();
+	storeFAC1InMem(destAdress + 5);
+
+
+	//float gradient_z = map_the_world(point + (0, 0, smallstep)) - map_the_world(point - (0, 0, smallstep));
+
+	//(point + (0, 0, smallstep))
+	vectorAddition(point, &smallStepVecZ, &tempVector);
+	//map_the_world(point + (0, 0, smallstep))
+	mapTheWorld(&smallStepVecZ, &tempFPx);
+	//(point - (0, 0, smallstep))
+	vectorSubtraction(point, &smallStepVecZ, &tempVector);
+	//map_the_world(point - (0, 0, smallstep))
+	mapTheWorld(&smallStepVecX, &tempFPy);
+
+	//makeFPImmediate(0, &tempFPx);
+	//makeFPImmediate(0, &tempFPy);
+
+	loadFAC1fromMem(&tempFPx);
+	loadFAC2fromMem(&tempFPy);//F
+	subtractFACs();
+	storeFAC1InMem(destAdress + 10);
+}
+
 
 //Draw pixel while using multicolor bitmap mode
 void drawPixelMBM(unsigned int x, unsigned int y, unsigned char color) {
@@ -838,18 +839,17 @@ void main(void)
 	struct vector3 projPoint;
 	struct vector3 rayDirection;
 	struct vector3 intersectionPoint;
-	struct vector3 sphereCenter;
 	struct vector3 lightPosition;
 	struct vector3 pointToLightVec;
 	struct vector3 pointNormalVec;
-	struct floatingPoint sphereRadius;
+	struct vector3 testPoint;
 	struct floatingPoint tValue;
 	struct floatingPoint lambertian;
 	unsigned int x = 0;						// pixel position x coordinate
 	unsigned int y = 0;						// pixel position y coordinate
-	unsigned int xStartEnd = 0;				// narrow the render window
-	unsigned int yStartEnd = 0;				// narrow the render window
-	unsigned char drawColor = 3;
+	unsigned int xStartEnd;					// narrow the render window
+	unsigned int yStartEnd;					// narrow the render window
+	unsigned char drawColor;
 	signed int tValueInt;
 	signed int lambertianInt;
 
@@ -863,24 +863,38 @@ void main(void)
 	makeFraction(1, 2, &half); //0.5
 	makeFraction(RESOLUTION_X*2, RESOLUTION_Y, &aspect); //screen aspect ratio
 	makeFraction(1, MINIMUM_HIT_DISTANCE_FACTOR, &MINIMUM_HIT_DISTANCE); //0.1
-	makeFraction(1, 200, &smallStepFP); //0.01
+	makeFraction(1, 10000, &smallStepFP); //0.001
+
+	//Make small step vectors - Hvorfor er de ubetydelige? CalcNormalSDF gir samme svar uansett
+	fillVectorValues(&smallStepVecX, 23, 0, 5);
+	//loadFAC1fromMem(&smallStepFP);
+	//storeFAC1InMem(&smallStepVecX);
+	fillVectorValues(&smallStepVecY, 0, 0, 7);
+	//loadFAC1fromMem(&smallStepFP);
+	//storeFAC1InMem(&smallStepVecY + 5);
+	fillVectorValues(&smallStepVecZ, 9, 2, 4);
+	//loadFAC1fromMem(&smallStepFP);
+	//storeFAC1InMem(&smallStepVecZ + 10);
 
 
 	//set projection angle point (change Z position to change lens angle)
 	fillVectorValues(&projPoint, 0, 0, -1);
 
 	//set Sphere center and radius (METHOD 1)
-	//fillVectorValues(&sphereCenter, 0, 0, 3);
-	//makeFPImmediate(2, &sphereRadius);
+	fillVectorValues(&sphereCenter, 0, 0, 4);
+	makeFPImmediate(2, &sphereRadius);
 
 	//set light position
 	fillVectorValues(&lightPosition, 0, 0, -1);		//WTF!
 	//fillVectorValues(&lightPosition, 1, 3, -2);
+	
+	fillVectorValues(&testPoint, 0, 0, 1);			
+
 
 
 	//only render part of screen
-	xStartEnd = 48; 
-	yStartEnd = 45;
+	xStartEnd = 60; 
+	yStartEnd = 60;
 
 	// RENDER LOOP	
 	for (y = yStartEnd; y < (RESOLUTION_Y - yStartEnd); y++) {
@@ -909,14 +923,18 @@ void main(void)
 			if (tValueInt > 0) {
 				//get intersection point using distance t
 				calcJumpPoint(&rayOrigin, &rayDirection, &tValue, &intersectionPoint);
+				
 				//calculate normalized point-to-light vector
 				vectorSubtraction(&lightPosition, &intersectionPoint, &pointToLightVec);
 				normalizeVector(&pointToLightVec, &pointToLightVec);
+				
 				//calculate point normal (METHOD 1)
-				//vectorSubtraction(&intersectionPoint, &sphereCenter, &pointNormalVec);
+				//vectorSubtraction(&intersectionPoint, &sphereCenter, &pointNormalVec); // intersectionpoint is correct, so map and above works. Must be error in calcNorm
+				
 				//calculate point normal (METHOD 2)
 				calcNormalSDF(&intersectionPoint, &pointNormalVec);
-				normalizeVector(&pointNormalVec, &pointNormalVec);
+				//normalizeVector(&pointNormalVec, &pointNormalVec);
+				
 				//get lambertian (0-1) and multiply by 100 to get 0-100 integer
 				dotProduct(&pointToLightVec, &pointNormalVec, &lambertian);
 				loadFAC1fromMem(&lambertian);

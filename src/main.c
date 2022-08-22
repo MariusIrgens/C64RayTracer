@@ -44,6 +44,7 @@ unsigned char numberHigh;
 struct floatingPoint tempFPx;
 struct floatingPoint tempFPy;
 struct floatingPoint tempFPz;
+struct floatingPoint tempFPv;
 struct floatingPoint half;
 struct floatingPoint aspect;
 struct floatingPoint MINIMUM_HIT_DISTANCE;
@@ -52,9 +53,6 @@ struct floatingPoint sphereRadius;
 struct floatingPoint distanceToClosest;
 struct vector3 tempVector;
 struct vector3 sphereCenter;
-struct vector3 smallStepVecX;
-struct vector3 smallStepVecY;
-struct vector3 smallStepVecZ;
 div_t xDiv;
 div_t yDiv;
 
@@ -187,6 +185,16 @@ void makeFPImmediate(signed int value, unsigned int destAdress) {
 	loadFAC1Immediate(value);
 	storeFAC1InMem(destAdress);
 }
+
+void makeFraction(signed int x, signed int y, unsigned int destAdress) {
+	loadFAC1Immediate(x);
+	storeFAC1InMem(&tempFPx);
+	loadFAC1Immediate(y);
+	divideFAC1Mem(&tempFPx);			// (mem / FAC1)
+	storeFAC1InMem(destAdress);
+}
+
+//VECTOR MATH - using the floating point math methods above
 
 void fillVectorValues(unsigned int vecAdress, signed int x, signed int y, signed int z) {
 	loadFAC1Immediate(x);
@@ -341,14 +349,6 @@ void normalizeVector(unsigned int vecAdressA, unsigned int destAdress) {
 	storeFAC1InMem(destAdress + 10); //store in dest.z
 }
 
-void makeFraction(signed int x, signed int y, unsigned int destAdress) {
-	loadFAC1Immediate(x);
-	storeFAC1InMem(&tempFPx);
-	loadFAC1Immediate(y);
-	divideFAC1Mem(&tempFPx);			// (mem / FAC1)
-	storeFAC1InMem(destAdress);
-}
-
 void calcOrigin(unsigned int x, unsigned int y, unsigned int destAdress) {
 	//origin.x
 	// x / resolution
@@ -387,171 +387,171 @@ void calcOrigin(unsigned int x, unsigned int y, unsigned int destAdress) {
 	storeFAC1InMem(destAdress + 10);
 }
 
-//Calculate Sphere-Ray intersection point distance (nearest, if any).
-//Based on the algorithm in the book "Mathematics for 3D game programming and computer graphics (3rd edition)"
-void sphereIntersect(unsigned int ro, unsigned int rd, unsigned int sc, unsigned int sr, unsigned int destAdress) {
-	//ro = ray origin
-	//rd = ray direction
-	//sc = sphere center
-	//sr = sphere radius
-	//destAdress = destination floating point (answer - t value)
-	struct floatingPoint a;
-	struct floatingPoint b;
-	struct floatingPoint c;
-	struct floatingPoint D;
-	struct floatingPoint tempFPv;
-	signed int ifCheck;
-
-	//printVectorValues(ro);
-
-	// a = dot(rayDirection, rayDirection)
-	dotProduct(rd, rd, &a);
-
-
-	// b = 2*dot(rayOrigin, rayDirection) - 2*dot(rayDirection, sphereCenter)
-	// (rayOrigin, rayDirection) into tempFPx
-	dotProduct(ro, rd, &tempFPx);
-
-	// 2*dot(rayOrigin, rayDirection)
-	loadFAC1Immediate(2);
-	loadFAC2fromMem(&tempFPx);
-	multiplyFACs();
-	storeFAC1InMem(&tempFPx);
-
-	// (rayDirection, sphereCenter) into tempFPy
-	dotProduct(rd, sc, &tempFPy);
-
-	// 2*dot(rayDirection, sphereCenter)
-	loadFAC1Immediate(2);
-	loadFAC2fromMem(&tempFPy);
-	multiplyFACs();
-	storeFAC1InMem(&tempFPy);
-
-	// 2*dot(rayOrigin, rayDirection) - 2*dot(rayDirection, sphereCenter)
-	// FAC2	- FAC1
-	loadFAC2fromMem(&tempFPx);
-	loadFAC1fromMem(&tempFPy);
-	subtractFACs();
-	storeFAC1InMem(&b);
-
-
-	// c = dot(rayOrigin, rayOrigin) -2*dot(rayOrigin, sphereCenter) + dot(sphereCenter, sphereCenter) - sphereRadius^2
-	// dot(rayOrigin, rayOrigin)
-	dotProduct(ro, ro, &tempFPx);
-
-	// dot(rayOrigin, sphereCenter)
-	dotProduct(ro, sc, &tempFPy);
-	// 2*dot(rayOrigin, sphereCenter)
-	loadFAC1Immediate(2);
-	loadFAC2fromMem(&tempFPy);
-	multiplyFACs();
-	storeFAC1InMem(&tempFPy);
-
-	// dot(sphereCenter, sphereCenter)
-	dotProduct(sc, sc, &tempFPz);
-
-	// sphereRadius ^ 2
-	loadFAC2fromMem(sr);
-	loadFAC1Immediate(2);
-	powFAC2toFAC1();
-	storeFAC1InMem(&tempFPv);
-
-	// dot(rayOrigin, rayOrigin) -2*dot(rayOrigin, sphereCenter) - 1st half
-	// FAC2	- FAC1
-	loadFAC2fromMem(&tempFPx);
-	loadFAC1fromMem(&tempFPy);
-	subtractFACs();
-	storeFAC1InMem(&tempFPx);
-
-	// dot(sphereCenter, sphereCenter) - sphereRadius^2 - 2nd half
-	// FAC2	- FAC1
-	loadFAC2fromMem(&tempFPz);
-	loadFAC1fromMem(&tempFPv);
-	subtractFACs();
-	storeFAC1InMem(&tempFPy);
-
-	// dot(rayOrigin, rayOrigin) -2*dot(rayOrigin, sphereCenter) + dot(sphereCenter, sphereCenter) - sphereRadius^2
-	loadFAC1fromMem(&tempFPx);
-	loadFAC2fromMem(&tempFPy);
-	addFACs();
-	storeFAC1InMem(&c);
-
-
-	// D = pow(b, 2) - 4*a*c
-	// pow(b, 2)
-	loadFAC2fromMem(&b);
-	loadFAC1Immediate(2);
-	powFAC2toFAC1();
-	storeFAC1InMem(&tempFPx);
-
-	// 4*a*c
-	loadFAC1fromMem(&a);
-	loadFAC2fromMem(&c);
-	multiplyFACs();
-	moveFAC1toFAC2();
-	loadFAC1Immediate(4);
-	multiplyFACs();
-	storeFAC1InMem(&tempFPy);
-
-	// pow(b, 2) - 4*a*c
-	// FAC2	- FAC1
-	loadFAC2fromMem(&tempFPx);
-	loadFAC1fromMem(&tempFPy);
-	subtractFACs();
-	storeFAC1InMem(&D);
-
-	// 	if (D >= 0)
-	//evaluateSignFAC1(); // $01 = pos, $ff = neg, $00 = 0;
-	loadFAC1fromMem(&D);
-	FAC1toInt(&ifCheck);
-	if (ifCheck >= 0) {
-		//cprintf("%i", ifCheck);
-
-		//ret = (-b - sqrt(D)) / 2 * a  - NEAREST HIT
-		//-b
-		loadFAC1Immediate(0);
-		moveFAC1toFAC2();
-		loadFAC1fromMem(&b);
-		subtractFACs();
-		storeFAC1InMem(&tempFPx);
-
-		//sqrt(D)
-		loadFAC1fromMem(&D);
-		squaredOfFAC1();
-		storeFAC1InMem(&tempFPy);
-
-		// 2 * a
-		loadFAC2fromMem(&a);
-		loadFAC1Immediate(2);
-		multiplyFACs();
-		storeFAC1InMem(&tempFPv);
-
-		//(-b - sqrt(D))
-		loadFAC2fromMem(&tempFPx);
-		loadFAC1fromMem(&tempFPy);
-		subtractFACs();
-		storeFAC1InMem(&tempFPz);
-
-		//(-b - sqrt(D)) / 2 * a (FAC2/FAC1)
-		/*loadFAC2fromMem(&tempFPz);
-		loadFAC1fromMem(&tempFPv);
-		divideFACs();*/
-		//(mem/FAC1)
-		loadFAC1fromMem(&tempFPv);
-		divideFAC1Mem(&tempFPz);
-		storeFAC1InMem(destAdress);
-	}
-	else {
-		loadFAC1Immediate(-1);
-		storeFAC1InMem(destAdress);
-	}
-}
-
 void calcJumpPoint(unsigned int ro, unsigned int rd, unsigned int t, unsigned int destAdress) {
 	// rayOrigin + rayDirection * t
 	vectorMultiplyByMem(rd, t, destAdress); // rayDirection * t
 	vectorAddition(ro, destAdress, destAdress); // add ro
 }
+
+//METHOD 1 FUNCTIONS
+//Calculate Sphere-Ray intersection point distance (nearest, if any).
+//Based on the algorithm in the book "Mathematics for 3D game programming and computer graphics (3rd edition)"
+//void sphereIntersect(unsigned int ro, unsigned int rd, unsigned int sc, unsigned int sr, unsigned int destAdress) {
+//	//ro = ray origin
+//	//rd = ray direction
+//	//sc = sphere center
+//	//sr = sphere radius
+//	//destAdress = destination floating point (answer - t value)
+//	struct floatingPoint a;
+//	struct floatingPoint b;
+//	struct floatingPoint c;
+//	struct floatingPoint D;
+//	signed int ifCheck;
+//
+//	//printVectorValues(ro);
+//
+//	// a = dot(rayDirection, rayDirection)
+//	dotProduct(rd, rd, &a);
+//
+//
+//	// b = 2*dot(rayOrigin, rayDirection) - 2*dot(rayDirection, sphereCenter)
+//	// (rayOrigin, rayDirection) into tempFPx
+//	dotProduct(ro, rd, &tempFPx);
+//
+//	// 2*dot(rayOrigin, rayDirection)
+//	loadFAC1Immediate(2);
+//	loadFAC2fromMem(&tempFPx);
+//	multiplyFACs();
+//	storeFAC1InMem(&tempFPx);
+//
+//	// (rayDirection, sphereCenter) into tempFPy
+//	dotProduct(rd, sc, &tempFPy);
+//
+//	// 2*dot(rayDirection, sphereCenter)
+//	loadFAC1Immediate(2);
+//	loadFAC2fromMem(&tempFPy);
+//	multiplyFACs();
+//	storeFAC1InMem(&tempFPy);
+//
+//	// 2*dot(rayOrigin, rayDirection) - 2*dot(rayDirection, sphereCenter)
+//	// FAC2	- FAC1
+//	loadFAC2fromMem(&tempFPx);
+//	loadFAC1fromMem(&tempFPy);
+//	subtractFACs();
+//	storeFAC1InMem(&b);
+//
+//
+//	// c = dot(rayOrigin, rayOrigin) -2*dot(rayOrigin, sphereCenter) + dot(sphereCenter, sphereCenter) - sphereRadius^2
+//	// dot(rayOrigin, rayOrigin)
+//	dotProduct(ro, ro, &tempFPx);
+//
+//	// dot(rayOrigin, sphereCenter)
+//	dotProduct(ro, sc, &tempFPy);
+//	// 2*dot(rayOrigin, sphereCenter)
+//	loadFAC1Immediate(2);
+//	loadFAC2fromMem(&tempFPy);
+//	multiplyFACs();
+//	storeFAC1InMem(&tempFPy);
+//
+//	// dot(sphereCenter, sphereCenter)
+//	dotProduct(sc, sc, &tempFPz);
+//
+//	// sphereRadius ^ 2
+//	loadFAC2fromMem(sr);
+//	loadFAC1Immediate(2);
+//	powFAC2toFAC1();
+//	storeFAC1InMem(&tempFPv);
+//
+//	// dot(rayOrigin, rayOrigin) -2*dot(rayOrigin, sphereCenter) - 1st half
+//	// FAC2	- FAC1
+//	loadFAC2fromMem(&tempFPx);
+//	loadFAC1fromMem(&tempFPy);
+//	subtractFACs();
+//	storeFAC1InMem(&tempFPx);
+//
+//	// dot(sphereCenter, sphereCenter) - sphereRadius^2 - 2nd half
+//	// FAC2	- FAC1
+//	loadFAC2fromMem(&tempFPz);
+//	loadFAC1fromMem(&tempFPv);
+//	subtractFACs();
+//	storeFAC1InMem(&tempFPy);
+//
+//	// dot(rayOrigin, rayOrigin) -2*dot(rayOrigin, sphereCenter) + dot(sphereCenter, sphereCenter) - sphereRadius^2
+//	loadFAC1fromMem(&tempFPx);
+//	loadFAC2fromMem(&tempFPy);
+//	addFACs();
+//	storeFAC1InMem(&c);
+//
+//
+//	// D = pow(b, 2) - 4*a*c
+//	// pow(b, 2)
+//	loadFAC2fromMem(&b);
+//	loadFAC1Immediate(2);
+//	powFAC2toFAC1();
+//	storeFAC1InMem(&tempFPx);
+//
+//	// 4*a*c
+//	loadFAC1fromMem(&a);
+//	loadFAC2fromMem(&c);
+//	multiplyFACs();
+//	moveFAC1toFAC2();
+//	loadFAC1Immediate(4);
+//	multiplyFACs();
+//	storeFAC1InMem(&tempFPy);
+//
+//	// pow(b, 2) - 4*a*c
+//	// FAC2	- FAC1
+//	loadFAC2fromMem(&tempFPx);
+//	loadFAC1fromMem(&tempFPy);
+//	subtractFACs();
+//	storeFAC1InMem(&D);
+//
+//	// 	if (D >= 0)
+//	//evaluateSignFAC1(); // $01 = pos, $ff = neg, $00 = 0;
+//	loadFAC1fromMem(&D);
+//	FAC1toInt(&ifCheck);
+//	if (ifCheck >= 0) {
+//		//cprintf("%i", ifCheck);
+//
+//		//ret = (-b - sqrt(D)) / 2 * a  - NEAREST HIT
+//		//-b
+//		loadFAC1Immediate(0);
+//		moveFAC1toFAC2();
+//		loadFAC1fromMem(&b);
+//		subtractFACs();
+//		storeFAC1InMem(&tempFPx);
+//
+//		//sqrt(D)
+//		loadFAC1fromMem(&D);
+//		squaredOfFAC1();
+//		storeFAC1InMem(&tempFPy);
+//
+//		// 2 * a
+//		loadFAC2fromMem(&a);
+//		loadFAC1Immediate(2);
+//		multiplyFACs();
+//		storeFAC1InMem(&tempFPv);
+//
+//		//(-b - sqrt(D))
+//		loadFAC2fromMem(&tempFPx);
+//		loadFAC1fromMem(&tempFPy);
+//		subtractFACs();
+//		storeFAC1InMem(&tempFPz);
+//
+//		//(-b - sqrt(D)) / 2 * a (FAC2/FAC1)
+//		/*loadFAC2fromMem(&tempFPz);
+//		loadFAC1fromMem(&tempFPv);
+//		divideFACs();*/
+//		//(mem/FAC1)
+//		loadFAC1fromMem(&tempFPv);
+//		divideFAC1Mem(&tempFPz);
+//		storeFAC1InMem(destAdress);
+//	}
+//	else {
+//		loadFAC1Immediate(-1);
+//		storeFAC1InMem(destAdress);
+//	}
+//}
 
 //METHOD 2 FUNCTIONS
 //Calculate Ray intersection point distance using the Signed Distance Function method, as popularized by Inigo Quilez
@@ -627,66 +627,67 @@ void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
 
 void calcNormalSDF(unsigned int point, unsigned int destAdress) {
 
+	struct floatingPoint GradA;
+	struct floatingPoint GradB;
+
+	struct vector3 smallStepVecX;
+	struct vector3 smallStepVecY;
+	struct vector3 smallStepVecZ;
+	struct vector3 newPoint;
+
+	fillVectorValues(&smallStepVecX, 0, 0, 0);
+	adress = &smallStepVecX;
+	loadFAC1fromMem(&smallStepFP);
+	storeFAC1InMem(adress);
+
+	fillVectorValues(&smallStepVecY, 0, 0, 0);
+	adress = &smallStepVecY;
+	loadFAC1fromMem(&smallStepFP);
+	storeFAC1InMem(adress + 5);
+
+	fillVectorValues(&smallStepVecZ, 0, 0, 0);
+	adress = &smallStepVecZ;
+	loadFAC1fromMem(&smallStepFP);
+	storeFAC1InMem(adress + 10);
+
 	//float gradient_x = map_the_world(point + (smallstep, 0, 0)) - map_the_world(point - (smallstep, 0, 0));
-
-	//(point + (smallstep, 0, 0))
-	vectorAddition(point, &smallStepVecX, &tempVector);
 	//map_the_world(point + (smallstep, 0, 0))
-	mapTheWorld(&smallStepVecX, &tempFPx);
-	//(point - (smallstep, 0, 0))
-	vectorSubtraction(point, &smallStepVecX, &tempVector);
+	vectorAddition(point, &smallStepVecX, &newPoint);
+	mapTheWorld(&newPoint, &GradA);
 	//map_the_world(point - (smallstep, 0, 0))
-	mapTheWorld(&smallStepVecY, &tempFPy);
-
-	//makeFPImmediate(0, &tempFPx);
-	//makeFPImmediate(0, &tempFPy);
-
-	loadFAC2fromMem(&tempFPx);
-	loadFAC1fromMem(&tempFPy);
+	vectorSubtraction(point, &smallStepVecX, &newPoint);
+	mapTheWorld(&newPoint, &GradB);
+	loadFAC2fromMem(&GradA);
+	loadFAC1fromMem(&GradB);
 	subtractFACs();								 //(FAC2 - FAC1)
 	storeFAC1InMem(destAdress);
 
 
 	//float gradient_y = map_the_world(point + (0, smallstep, 0)) - map_the_world(point - (0, smallstep, 0));
-
-	//(point + (0, smallstep, 0))
-	vectorAddition(point, &smallStepVecY, &tempVector);
 	//map_the_world(point + (0, smallstep, 0))
-	mapTheWorld(&smallStepVecY, &tempFPx);
-	//(point - (0, smallstep, 0))
-	vectorSubtraction(point, &smallStepVecY, &tempVector);
+	vectorAddition(point, &smallStepVecY, &newPoint);
+	mapTheWorld(&newPoint, &GradA);
 	//map_the_world(point - (0, smallstep, 0))
-	mapTheWorld(&smallStepVecZ, &tempFPy);
-
-	//makeFPImmediate(0, &tempFPx);
-	//makeFPImmediate(0, &tempFPy);
-
-	loadFAC2fromMem(&tempFPx);
-	loadFAC1fromMem(&tempFPy);
+	vectorSubtraction(point, &smallStepVecY, &newPoint);
+	mapTheWorld(&newPoint, &GradB);
+	loadFAC2fromMem(&GradA);
+	loadFAC1fromMem(&GradB);
 	subtractFACs();
 	storeFAC1InMem(destAdress + 5);
 
 
 	//float gradient_z = map_the_world(point + (0, 0, smallstep)) - map_the_world(point - (0, 0, smallstep));
-
-	//(point + (0, 0, smallstep))
-	vectorAddition(point, &smallStepVecZ, &tempVector);
 	//map_the_world(point + (0, 0, smallstep))
-	mapTheWorld(&smallStepVecZ, &tempFPx);
-	//(point - (0, 0, smallstep))
-	vectorSubtraction(point, &smallStepVecZ, &tempVector);
+	vectorAddition(point, &smallStepVecZ, &newPoint);
+	mapTheWorld(&newPoint, &GradA);
 	//map_the_world(point - (0, 0, smallstep))
-	mapTheWorld(&smallStepVecX, &tempFPy);
-
-	//makeFPImmediate(0, &tempFPx);
-	//makeFPImmediate(0, &tempFPy);
-
-	loadFAC1fromMem(&tempFPx);
-	loadFAC2fromMem(&tempFPy);//F
+	vectorSubtraction(point, &smallStepVecZ, &newPoint);
+	mapTheWorld(&newPoint, &GradB);
+	loadFAC2fromMem(&GradA);
+	loadFAC1fromMem(&GradB);//F
 	subtractFACs();
 	storeFAC1InMem(destAdress + 10);
 }
-
 
 //Draw pixel while using multicolor bitmap mode
 void drawPixelMBM(unsigned int x, unsigned int y, unsigned char color) {
@@ -842,7 +843,6 @@ void main(void)
 	struct vector3 lightPosition;
 	struct vector3 pointToLightVec;
 	struct vector3 pointNormalVec;
-	struct vector3 testPoint;
 	struct floatingPoint tValue;
 	struct floatingPoint lambertian;
 	unsigned int x = 0;						// pixel position x coordinate
@@ -863,35 +863,18 @@ void main(void)
 	makeFraction(1, 2, &half); //0.5
 	makeFraction(RESOLUTION_X*2, RESOLUTION_Y, &aspect); //screen aspect ratio
 	makeFraction(1, MINIMUM_HIT_DISTANCE_FACTOR, &MINIMUM_HIT_DISTANCE); //0.1
-	makeFraction(1, 10000, &smallStepFP); //0.001
-
-	//Make small step vectors - Hvorfor er de ubetydelige? CalcNormalSDF gir samme svar uansett
-	fillVectorValues(&smallStepVecX, 23, 0, 5);
-	//loadFAC1fromMem(&smallStepFP);
-	//storeFAC1InMem(&smallStepVecX);
-	fillVectorValues(&smallStepVecY, 0, 0, 7);
-	//loadFAC1fromMem(&smallStepFP);
-	//storeFAC1InMem(&smallStepVecY + 5);
-	fillVectorValues(&smallStepVecZ, 9, 2, 4);
-	//loadFAC1fromMem(&smallStepFP);
-	//storeFAC1InMem(&smallStepVecZ + 10);
-
+	makeFraction(1, 100, &smallStepFP); //0.001
 
 	//set projection angle point (change Z position to change lens angle)
 	fillVectorValues(&projPoint, 0, 0, -1);
 
-	//set Sphere center and radius (METHOD 1)
+	//set Sphere center and radius
 	fillVectorValues(&sphereCenter, 0, 0, 4);
 	makeFPImmediate(2, &sphereRadius);
 
 	//set light position
-	fillVectorValues(&lightPosition, 0, 0, -1);		//WTF!
-	//fillVectorValues(&lightPosition, 1, 3, -2);
+	fillVectorValues(&lightPosition, 0, 0, -1);	
 	
-	fillVectorValues(&testPoint, 0, 0, 1);			
-
-
-
 	//only render part of screen
 	xStartEnd = 60; 
 	yStartEnd = 60;
@@ -907,13 +890,11 @@ void main(void)
 			vectorSubtraction(&rayOrigin, &projPoint, &rayDirection);
 			normalizeVector(&rayDirection, &rayDirection);
 
-			
 			//METHOD 1: RAY-SPHERE INTERSECTION DISTANCE
 			//sphereIntersect(&rayOrigin, &rayDirection, &sphereCenter, &sphereRadius, &tValue);
 
 			//METHOD 2: SDF LOOP
 			SDFRaymarch(&rayOrigin, &rayDirection, &tValue);
-
 
 			// check if we actually hit anything before calculating intersection point 
 			loadFAC1fromMem(&tValue);
@@ -933,7 +914,7 @@ void main(void)
 				
 				//calculate point normal (METHOD 2)
 				calcNormalSDF(&intersectionPoint, &pointNormalVec);
-				//normalizeVector(&pointNormalVec, &pointNormalVec);
+				normalizeVector(&pointNormalVec, &pointNormalVec);
 				
 				//get lambertian (0-1) and multiply by 100 to get 0-100 integer
 				dotProduct(&pointToLightVec, &pointNormalVec, &lambertian);

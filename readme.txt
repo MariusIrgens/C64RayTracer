@@ -2,6 +2,9 @@
    C64 RAYTRACER BY MARIUS IRGENS
 ========================================================================
 
+OBS! I am working on implementing Signed Distance Function style raymarching at the moment, so the program is not working.
+If you want to test it you have to comment out Method 2 (SDFRaymarch) and uncomment Method 1 (sphereIntersect) in the main render loop.
+
 So far it is only doing sphere/ray intersection and lambertian shading. In the future I will try other ray tracing algorithms (when I have time).
 
 Its written in C (with lots of inline assembly) and uses the cc65 compiler. Especially the floating point aritmetic subroutine call functions is written in assembly.

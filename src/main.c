@@ -358,7 +358,7 @@ void calcOrigin(unsigned int x, unsigned int y, unsigned int destAdress) {
 	subtractFACs();						// (FAC2 - FAC1)
 	// ((x / resolution) -0.5) * 2
 	storeFAC1InMem(&tempFPx);
-	loadFAC1Immediate(-2);				// -2 = flip image
+	loadFAC1Immediate(2);				// -2 = flip image
 	multiplyFAC1Mem(&tempFPx);
 	multiplyFAC1Mem(&aspect);			// Make up for resolution difference
 	storeFAC1InMem(destAdress);
@@ -375,7 +375,7 @@ void calcOrigin(unsigned int x, unsigned int y, unsigned int destAdress) {
 	subtractFACs();
 	// ((y / resolution) -0.5) * -2		
 	storeFAC1InMem(&tempFPy);
-	loadFAC1Immediate(2);				// -2 = flip image
+	loadFAC1Immediate(-2);				// -2 = flip image
 	multiplyFAC1Mem(&tempFPy);
 	storeFAC1InMem(destAdress + 5);
 
@@ -588,7 +588,7 @@ void mapTheWorld(unsigned int point, unsigned int destAdress) {
 
 void calcNormalSDF(unsigned int point, unsigned int destAdress) {
 
-	//float gradient_x = map_the_world(point + (smallstep, 0, 0) - map_the_world(point - (smallstep, 0, 0));
+	//float gradient_x = map_the_world(point + (smallstep, 0, 0)) - map_the_world(point - (smallstep, 0, 0));
 	
 	//(smallstep, 0, 0)
 	fillVectorValues(&smallStepVec, 0, 0, 0);	//Empty smallStep Vector
@@ -874,13 +874,13 @@ void main(void)
 	//makeFPImmediate(2, &sphereRadius);
 
 	//set light position
-	fillVectorValues(&lightPosition, 0, 0, 1);		//WTF!
+	fillVectorValues(&lightPosition, 0, 0, -1);		//WTF!
 	//fillVectorValues(&lightPosition, 1, 3, -2);
 
 
 	//only render part of screen
-	xStartEnd = 35; 
-	yStartEnd = 39;
+	xStartEnd = 48; 
+	yStartEnd = 45;
 
 	// RENDER LOOP	
 	for (y = yStartEnd; y < (RESOLUTION_Y - yStartEnd); y++) {

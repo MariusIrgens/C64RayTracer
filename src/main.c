@@ -5,14 +5,13 @@
 
 #define vicBankAdress 0x4000
 #define bitmapAdress 0x6000
-#define RESOLUTION_X 160
+#define RESOLUTION_X 160	//160*200 = 32000 pixels
 #define RESOLUTION_Y 200
 #define ORIGIN_Z 0
 #define MYCOLORS 0xFC	// color 2, color 1
 #define MYCOLORS2 0x01	// unused, color 3
 #define NUMBER_OF_STEPS 80
 #define MAX_TRACE_DISTANCE 50
-#define MINIMUM_HIT_DISTANCE_FACTOR 10
 
 
 // STRUCTS
@@ -47,15 +46,14 @@ struct floatingPoint tempFPz;
 struct floatingPoint tempFPv;
 struct floatingPoint half;
 struct floatingPoint aspect;
-struct floatingPoint MINIMUM_HIT_DISTANCE;
 struct floatingPoint smallStepFP;
-struct floatingPoint sphereRadius;
-struct floatingPoint distanceToClosest;
-struct vector3 tempVector;
-struct vector3 sphereCenter;
 div_t xDiv;
 div_t yDiv;
 
+struct vector3 sphere1Center;
+struct floatingPoint sphere1Radius;
+struct vector3 sphere2Center;
+struct floatingPoint sphere2Radius;
 
 // FLOATING POINT MATH - using C64 Basic and Kernal ROM routines called with assembly
 // Made by Marius Irgens, but based on this awesome documentation:
@@ -179,6 +177,56 @@ void FAC1toInt(unsigned int destAdress) {
 	integer += numberLow;
 	POKEW(destAdress, integer);
 
+}
+
+void opUnion(unsigned int adressA, unsigned int adressB, unsigned int destAdress) {
+	loadFAC1fromMem(adressA);
+	LoadRegAYwithAdress(adressB);
+	__asm__("jsr $bc5b"); // Compare FAC1 with memory contents at A/Y (lo/high)
+	__asm__("sta $44"); //Store A in memory
+	numberLow = PEEK(0x0044);
+	if (numberLow == 0 || numberLow == 1) {
+		loadFAC1fromMem(adressB);
+		storeFAC1InMem(destAdress);
+	}
+	else if (numberLow == 0xff) {
+		loadFAC1fromMem(adressA);
+		storeFAC1InMem(destAdress);
+	}
+}
+
+void opSubtraction(unsigned int adressA, unsigned int adressB, unsigned int destAdress) {
+	loadFAC2fromMem(adressA);
+	loadFAC1Immediate(-1);
+	multiplyFACs();
+	LoadRegAYwithAdress(adressB);
+	__asm__("jsr $bc5b"); // Compare FAC1 with memory contents at A/Y (lo/high)
+	__asm__("sta $44"); //Store A in memory
+	numberLow = PEEK(0x0044);
+	if (numberLow == 0 || numberLow == 1) {
+		loadFAC1fromMem(adressA);
+		storeFAC1InMem(destAdress);
+	}
+	else if (numberLow == 0xff) {
+		loadFAC1fromMem(adressB);
+		storeFAC1InMem(destAdress);
+	}
+}
+
+void opIntersection(unsigned int adressA, unsigned int adressB, unsigned int destAdress) {
+	loadFAC1fromMem(adressA);
+	LoadRegAYwithAdress(adressB);
+	__asm__("jsr $bc5b"); // Compare FAC1 with memory contents at A/Y (lo/high)
+	__asm__("sta $44"); //Store A in memory
+	numberLow = PEEK(0x0044);
+	if (numberLow == 0 || numberLow == 1) {
+		loadFAC1fromMem(adressA);
+		storeFAC1InMem(destAdress);
+	}
+	else if (numberLow == 0xff) {
+		loadFAC1fromMem(adressB);
+		storeFAC1InMem(destAdress);
+	}
 }
 
 void makeFPImmediate(signed int value, unsigned int destAdress) {
@@ -558,29 +606,33 @@ void calcJumpPoint(unsigned int ro, unsigned int rd, unsigned int t, unsigned in
 //https://iquilezles.org
 
 void distanceFromSphere(unsigned int point, unsigned int sphereCenter, unsigned int sphereRadius, unsigned int destAdress) {
+	struct vector3 tempVector;
 	// length(point - sphere_center) - sphere_radius;
-	
 	//(point - sphere_center)
 	vectorSubtraction(point, sphereCenter, &tempVector);
-
 	// length(point - sphere_center)
 	vectorLength(&tempVector, &tempFPx);
-
 	// (length(point - sphere_center)) - sphere_radius;
-
-	// FAC2	- FAC1
 	loadFAC2fromMem(&tempFPx);			//(length(point - sphere_center))
 	loadFAC1fromMem(sphereRadius);		//sphere_radius
-	subtractFACs();
+	subtractFACs();						// FAC2	- FAC1
 	storeFAC1InMem(destAdress);
 
 }
 
 void mapTheWorld(unsigned int point, unsigned int destAdress) {
-	
+	struct floatingPoint returnDistance;
+	struct floatingPoint distanceTo1;
+	struct floatingPoint distanceTo2;
+
 	//distance_to_closest = distance_from_sphere(point, sphere.center, sphere.radius));
-	distanceFromSphere(point, &sphereCenter, &sphereRadius, &distanceToClosest);
-	loadFAC1fromMem(&distanceToClosest);		//return distanceToClosest
+	distanceFromSphere(point, &sphere1Center, &sphere1Radius, &distanceTo1);
+	distanceFromSphere(point, &sphere2Center, &sphere2Radius, &distanceTo2);
+	//opUnion(&distanceTo1, &distanceTo2, &returnDistance);
+	//opSubtraction(&distanceTo1, &distanceTo2, &returnDistance);
+	opIntersection(&distanceTo1, &distanceTo2, &returnDistance);
+
+	loadFAC1fromMem(&returnDistance);		//return returnDistance
 	storeFAC1InMem(destAdress);
 }
 
@@ -650,6 +702,7 @@ void calcNormalSDF(unsigned int point, unsigned int destAdress) {
 	loadFAC1fromMem(&smallStepFP);
 	storeFAC1InMem(adress + 10);
 
+
 	//float gradient_x = map_the_world(point + (smallstep, 0, 0)) - map_the_world(point - (smallstep, 0, 0));
 	//map_the_world(point + (smallstep, 0, 0))
 	vectorAddition(point, &smallStepVecX, &newPoint);
@@ -659,7 +712,7 @@ void calcNormalSDF(unsigned int point, unsigned int destAdress) {
 	mapTheWorld(&newPoint, &GradB);
 	loadFAC2fromMem(&GradA);
 	loadFAC1fromMem(&GradB);
-	subtractFACs();								 //(FAC2 - FAC1)
+	subtractFACs();	//(FAC2 - FAC1)
 	storeFAC1InMem(destAdress);
 
 
@@ -862,15 +915,18 @@ void main(void)
 	//Make fraction floats
 	makeFraction(1, 2, &half); //0.5
 	makeFraction(RESOLUTION_X*2, RESOLUTION_Y, &aspect); //screen aspect ratio
-	makeFraction(1, MINIMUM_HIT_DISTANCE_FACTOR, &MINIMUM_HIT_DISTANCE); //0.1
-	makeFraction(1, 100, &smallStepFP); //0.001
+	//makeFraction(1, MINIMUM_HIT_DISTANCE_FACTOR, &MINIMUM_HIT_DISTANCE); //0.1
+	makeFraction(1, 100, &smallStepFP); //0.01
 
 	//set projection angle point (change Z position to change lens angle)
 	fillVectorValues(&projPoint, 0, 0, -1);
 
-	//set Sphere center and radius
-	fillVectorValues(&sphereCenter, 0, 0, 4);
-	makeFPImmediate(2, &sphereRadius);
+	//set Sphere 1 center and radius
+	fillVectorValues(&sphere1Center, -1, 0, 3);
+	makeFPImmediate(2, &sphere1Radius);
+	//set Sphere 2 center and radius
+	fillVectorValues(&sphere2Center, 1, 0, 3);
+	makeFPImmediate(2, &sphere2Radius);
 
 	//set light position
 	fillVectorValues(&lightPosition, 0, 0, -1);	
@@ -922,8 +978,6 @@ void main(void)
 				multiplyFAC1by10();
 				multiplyFAC1by10();
 				FAC1toInt(&lambertianInt);
-				//TEST
-				//lambertianInt = 99;
 				
 				//choose render color defined by lambertian value
 				//COLOR 1

@@ -2,8 +2,7 @@
    C64 RAYTRACER BY MARIUS IRGENS
 ========================================================================
 
-OBS! I am working on implementing Signed Distance Function style raymarching at the moment, so the program is not working.
-If you want to test it you have to comment out Method 2 (SDFRaymarch) and uncomment Method 1 (sphereIntersect) in the main render loop.
+OBS! I am working on implementing Signed Distance Function style raymarching at the moment, so the program might not work.
 
 So far it is only doing sphere/ray intersection and lambertian shading. In the future I will try other ray tracing algorithms (when I have time).
 

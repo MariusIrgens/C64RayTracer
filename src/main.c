@@ -931,7 +931,7 @@ void main(void)
 	fillVectorValues(&sphere2Center, 1, 0, 3);
 	makeFPImmediate(2, &sphere2Radius);
 	//set Sphere 3 center and radius
-	fillVectorValues(&sphere3Center, 1, 2, 3);
+	fillVectorValues(&sphere3Center, 0, 2, 2);
 	makeFPImmediate(2, &sphere3Radius);
 
 	//set light position

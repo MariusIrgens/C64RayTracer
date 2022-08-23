@@ -10,8 +10,8 @@
 #define ORIGIN_Z 0
 #define MYCOLORS 0xFC	// color 2, color 1
 #define MYCOLORS2 0x01	// unused, color 3
-#define NUMBER_OF_STEPS 80
-#define MAX_TRACE_DISTANCE 50
+#define NUMBER_OF_STEPS 60
+#define MAX_TRACE_DISTANCE 10
 
 
 // STRUCTS
@@ -54,6 +54,8 @@ struct vector3 sphere1Center;
 struct floatingPoint sphere1Radius;
 struct vector3 sphere2Center;
 struct floatingPoint sphere2Radius;
+struct vector3 sphere3Center;
+struct floatingPoint sphere3Radius;
 
 // FLOATING POINT MATH - using C64 Basic and Kernal ROM routines called with assembly
 // Made by Marius Irgens, but based on this awesome documentation:
@@ -204,11 +206,11 @@ void opSubtraction(unsigned int adressA, unsigned int adressB, unsigned int dest
 	__asm__("sta $44"); //Store A in memory
 	numberLow = PEEK(0x0044);
 	if (numberLow == 0 || numberLow == 1) {
-		loadFAC1fromMem(adressA);
+		loadFAC1fromMem(adressB);
 		storeFAC1InMem(destAdress);
 	}
 	else if (numberLow == 0xff) {
-		loadFAC1fromMem(adressB);
+		loadFAC1fromMem(adressA);
 		storeFAC1InMem(destAdress);
 	}
 }
@@ -624,13 +626,14 @@ void mapTheWorld(unsigned int point, unsigned int destAdress) {
 	struct floatingPoint returnDistance;
 	struct floatingPoint distanceTo1;
 	struct floatingPoint distanceTo2;
+	struct floatingPoint distanceTo3;
 
 	//distance_to_closest = distance_from_sphere(point, sphere.center, sphere.radius));
 	distanceFromSphere(point, &sphere1Center, &sphere1Radius, &distanceTo1);
 	distanceFromSphere(point, &sphere2Center, &sphere2Radius, &distanceTo2);
-	//opUnion(&distanceTo1, &distanceTo2, &returnDistance);
-	//opSubtraction(&distanceTo1, &distanceTo2, &returnDistance);
-	opIntersection(&distanceTo1, &distanceTo2, &returnDistance);
+	distanceFromSphere(point, &sphere3Center, &sphere3Radius, &distanceTo3);
+	opUnion(&distanceTo1, &distanceTo2, &returnDistance);
+	opSubtraction(&returnDistance, &distanceTo3, &returnDistance);
 
 	loadFAC1fromMem(&returnDistance);		//return returnDistance
 	storeFAC1InMem(destAdress);
@@ -658,7 +661,7 @@ void SDFRaymarch(unsigned int ro, unsigned int rd, unsigned int destAdress) {
 
 		loadFAC1fromMem(&distanceToClosest);									//
 		multiplyFAC1by10();														//Check below 0.1 (multiply more for different minimum distances)
-		multiplyFAC1by10();														//Check below 0.01 (multiply more for different minimum distances)
+		//multiplyFAC1by10();														//Check below 0.01 (multiply more for different minimum distances)
 		FAC1toInt(&distanceToClosestInt);										//Convert floatingpoint to int for comparison
 
 		if (distanceToClosestInt < 1) {											//Check if minimum distance has been reached
@@ -751,10 +754,12 @@ void drawPixelMBM(unsigned int x, unsigned int y, unsigned char color) {
 	yDiv = div(y, 8);
 
 	if (color == 0) {
+		/*memAddr = bitmapAdress + (yDiv.quot * 320) + (xDiv.quot * 8) + (yDiv.rem);
+		addedPixel = 0b00000000;
+		POKE(memAddr, addedPixel);*/
 		return;
 	}
-
-	if (xDiv.rem == 0 && color == 1) {
+	else if (xDiv.rem == 0 && color == 1) {
 		addedPixel = 0b10000000;
 	}
 	else if (xDiv.rem == 0 && color == 2) {
@@ -794,7 +799,6 @@ void drawPixelMBM(unsigned int x, unsigned int y, unsigned char color) {
 	existingPixel = PEEK(memAddr);
 	addedPixel = existingPixel + addedPixel;
 	POKE(memAddr, addedPixel);
-	//Scputcxy(xDiv.quot, yDiv.quot, color + MYCOLORS);
 }
 
 //void FloatMathDebug() {
@@ -927,13 +931,16 @@ void main(void)
 	//set Sphere 2 center and radius
 	fillVectorValues(&sphere2Center, 1, 0, 3);
 	makeFPImmediate(2, &sphere2Radius);
+	//set Sphere 3 center and radius
+	fillVectorValues(&sphere3Center, 0, 0, 2);
+	makeFPImmediate(1, &sphere3Radius);
 
 	//set light position
 	fillVectorValues(&lightPosition, 0, 0, -1);	
 	
 	//only render part of screen
-	xStartEnd = 60; 
-	yStartEnd = 60;
+	xStartEnd = 30; //30 or 60
+	yStartEnd = 38; //38 or 60
 
 	// RENDER LOOP	
 	for (y = yStartEnd; y < (RESOLUTION_Y - yStartEnd); y++) {

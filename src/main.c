@@ -919,7 +919,6 @@ void main(void)
 	//Make fraction floats
 	makeFraction(1, 2, &half); //0.5
 	makeFraction(RESOLUTION_X*2, RESOLUTION_Y, &aspect); //screen aspect ratio
-	//makeFraction(1, MINIMUM_HIT_DISTANCE_FACTOR, &MINIMUM_HIT_DISTANCE); //0.1
 	makeFraction(1, 100, &smallStepFP); //0.01
 
 	//set projection angle point (change Z position to change lens angle)
@@ -932,15 +931,15 @@ void main(void)
 	fillVectorValues(&sphere2Center, 1, 0, 3);
 	makeFPImmediate(2, &sphere2Radius);
 	//set Sphere 3 center and radius
-	fillVectorValues(&sphere3Center, 0, 0, 2);
-	makeFPImmediate(1, &sphere3Radius);
+	fillVectorValues(&sphere3Center, 1, 2, 3);
+	makeFPImmediate(2, &sphere3Radius);
 
 	//set light position
-	fillVectorValues(&lightPosition, 0, 0, -1);	
+	fillVectorValues(&lightPosition, 0, 1, 0);	
 	
 	//only render part of screen
 	xStartEnd = 30; //30 or 60
-	yStartEnd = 38; //38 or 60
+	yStartEnd = 20; //38 or 60
 
 	// RENDER LOOP	
 	for (y = yStartEnd; y < (RESOLUTION_Y - yStartEnd); y++) {
